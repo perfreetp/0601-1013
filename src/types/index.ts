@@ -82,6 +82,7 @@ export interface CopyrightItem {
 export interface ReviewRecord {
   reviewerId: string;
   reviewerName: string;
+  role?: MemberRole;
   action: 'approve' | 'reject';
   comment: string;
   timestamp: string;
@@ -91,6 +92,7 @@ export interface Review {
   id: string;
   videoId: string;
   status: ReviewStatus;
+  requiredRoles: MemberRole[];
   sensitiveWords: SensitiveWord[];
   copyrights: CopyrightItem[];
   records: ReviewRecord[];
@@ -137,4 +139,9 @@ export interface OperationLog {
   action: string;
   target: string;
   timestamp: string;
+  targetMemberId?: string;
+  oldValue?: string;
+  newValue?: string;
+  operatorId?: string;
+  operatorName?: string;
 }

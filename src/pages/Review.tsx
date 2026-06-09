@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import VideoPlayer from '@/components/features/VideoPlayer';
 import { useReviewStore } from '@/store/useReviewStore';
 import { cn, formatDate } from '@/utils/format';
-import type { ReviewStatus, SensitiveWord, CopyrightItem, ReviewRecord } from '@/types';
+import { ROLE_LABELS, ROLE_COLORS } from '@/utils/constants';
+import type { ReviewStatus, SensitiveWord, CopyrightItem, ReviewRecord, MemberRole, Review } from '@/types';
 
 const statusConfig: Record<ReviewStatus, { label: string; variant: 'warning' | 'success' | 'danger'; icon: typeof Clock }> = {
   pending: { label: '待审核', variant: 'warning', icon: Clock },
@@ -54,9 +55,8 @@ const videoCovers: Record<string, string> = {
 type FilterStatus = 'all' | ReviewStatus;
 
 export default function Review() {
-  const { reviews, selectedReviewId, selectReview, approveReview, rejectReview } = useReviewStore();
+  const { reviews, selectedReviewId, selectReview, approveReview, rejectReview, filterStatus, setFilterStatus } = useReviewStore();
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [comment, setComment] = useState('');
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
 
@@ -284,6 +284,7 @@ export default function Review() {
                 <CopyrightPanel items={selectedReview.copyrights} />
 
                 <ReviewRecordsPanel
+                  review={selectedReview}
                   records={selectedReview.records}
                   comment={comment}
                   onCommentChange={setComment}
@@ -451,7 +452,66 @@ function CopyrightPanel({ items }: { items: CopyrightItem[] }) {
   );
 }
 
+function ReviewProgressBar({ review }: { review: Review }) {
+  const { requiredRoles, records } = review;
+  const confirmedRoles = new Map<MemberRole, ReviewRecord>();
+
+  records.forEach((record) => {
+    if (record.role && !confirmedRoles.has(record.role)) {
+      confirmedRoles.set(record.role, record);
+    }
+  });
+
+  const confirmed = requiredRoles.filter((role) => confirmedRoles.has(role));
+  const pending = requiredRoles.filter((role) => !confirmedRoles.has(role));
+  const progress = requiredRoles.length > 0 ? (confirmed.length / requiredRoles.length) * 100 : 0;
+
+  return (
+    <div className="mb-6 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-neutral-700">会签进度</span>
+        <span className="text-xs text-neutral-500">
+          {confirmed.length}/{requiredRoles.length} 已确认
+        </span>
+      </div>
+      <div className="w-full h-2 bg-neutral-100 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-gradient-primary rounded-full transition-all duration-300"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {requiredRoles.map((role) => {
+          const record = confirmedRoles.get(role);
+          const isConfirmed = !!record;
+          return (
+            <div
+              key={role}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all',
+                isConfirmed ? ROLE_COLORS[role] : 'bg-neutral-50 text-neutral-500 border-neutral-200'
+              )}
+            >
+              {isConfirmed ? (
+                <Check className="w-3 h-3" />
+              ) : (
+                <Clock className="w-3 h-3" />
+              )}
+              <span>
+                {isConfirmed ? '已确认' : '待确认'}：
+                {ROLE_LABELS[role]}
+                {record && `(${record.reviewerName})`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ReviewRecordsPanel({
+  review,
   records,
   comment,
   onCommentChange,
@@ -459,6 +519,7 @@ function ReviewRecordsPanel({
   onReject,
   disabled,
 }: {
+  review: Review;
   records: ReviewRecord[];
   comment: string;
   onCommentChange: (v: string) => void;
@@ -476,6 +537,8 @@ function ReviewRecordsPanel({
         <CardDescription>审核流程记录与意见</CardDescription>
       </CardHeader>
       <CardContent>
+        <ReviewProgressBar review={review} />
+
         {records.length > 0 && (
           <div className="space-y-3 mb-6">
             {records.map((record, idx) => (
@@ -486,6 +549,11 @@ function ReviewRecordsPanel({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm text-neutral-800">{record.reviewerName}</span>
+                    {record.role && (
+                      <Badge variant="default" className={cn('text-xs', ROLE_COLORS[record.role])}>
+                        {ROLE_LABELS[record.role]}
+                      </Badge>
+                    )}
                     <Badge variant={record.action === 'approve' ? 'success' : 'danger'}>
                       {record.action === 'approve' ? '审核通过' : '驳回'}
                     </Badge>

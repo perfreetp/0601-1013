@@ -57,6 +57,10 @@ export const useMemberStore = create<MemberState>((set, get) => ({
       action: '添加成员',
       target: `${member.name} (${member.email})`,
       timestamp: new Date().toISOString(),
+      targetMemberId: member.id,
+      newValue: ROLE_LABELS[member.role],
+      operatorId: 'current-user',
+      operatorName: '当前用户',
     };
     set((state) => {
       const newMembers = [...state.members, member];
@@ -76,6 +80,10 @@ export const useMemberStore = create<MemberState>((set, get) => ({
       action: '移除成员',
       target: `${member.name} (${member.email})`,
       timestamp: new Date().toISOString(),
+      targetMemberId: member.id,
+      oldValue: ROLE_LABELS[member.role],
+      operatorId: 'current-user',
+      operatorName: '当前用户',
     };
     set((state) => {
       const newMembers = state.members.filter((m) => m.id !== id);
@@ -97,6 +105,11 @@ export const useMemberStore = create<MemberState>((set, get) => ({
       action: '修改角色',
       target: `${member.name} 角色由 ${oldRoleLabel} 改为 ${newRoleLabel}`,
       timestamp: new Date().toISOString(),
+      targetMemberId: member.id,
+      oldValue: oldRoleLabel,
+      newValue: newRoleLabel,
+      operatorId: 'current-user',
+      operatorName: '当前用户',
     };
     set((state) => {
       const newMembers = state.members.map((m) => (m.id === id ? { ...m, role } : m));

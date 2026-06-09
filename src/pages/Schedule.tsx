@@ -74,6 +74,8 @@ export default function Schedule() {
   const [showModal, setShowModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [formData, setFormData] = useState<FormData>(emptyFormData);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<Date | null>(null);
 
   const showToast = (message: string) => {
     setToast({ show: true, message });
@@ -88,6 +90,51 @@ export default function Schedule() {
         return new Date(b.publishAt).getTime() - new Date(a.publishAt).getTime();
       });
   }, [schedules, activeStatus]);
+
+  const selectedDateSchedules = useMemo(() => {
+    if (!selectedDate) return [];
+    const dateStr = selectedDate.toISOString().split('T')[0];
+    return schedules.filter((s) => s.publishAt.startsWith(dateStr));
+  }, [schedules, selectedDate]);
+
+  const isSameDate = (date1: Date, date2: Date) => {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  };
+
+  const handleDragStart = (e: React.DragEvent, scheduleId: string) => {
+    e.dataTransfer.setData('scheduleId', scheduleId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, date: Date) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverDate(date);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverDate(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, date: Date) => {
+    e.preventDefault();
+    setDragOverDate(null);
+    const scheduleId = e.dataTransfer.getData('scheduleId');
+    if (!scheduleId) return;
+
+    const schedule = schedules.find((s) => s.id === scheduleId);
+    if (!schedule) return;
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const newPublishAt = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} 09:00:00`;
+
+    updateSchedule(scheduleId, { publishAt: newPublishAt });
+    showToast(`已将「${schedule.title}」移至 ${pad(date.getMonth() + 1)}-${pad(date.getDate())}`);
+  };
 
   const handleTogglePin = (id: string, title: string) => {
     togglePin(id);
@@ -142,6 +189,10 @@ export default function Schedule() {
     }
     if (!formData.publishAt) {
       showToast('请选择发布时间');
+      return;
+    }
+    if (formData.offlineAt && new Date(formData.offlineAt) < new Date(formData.publishAt)) {
+      showToast('下架时间不能早于发布时间');
       return;
     }
 
@@ -225,8 +276,10 @@ export default function Schedule() {
                 <Card
                   key={schedule.id}
                   hover
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, schedule.id)}
                   className={cn(
-                    'p-4 transition-all duration-300',
+                    'p-4 transition-all duration-300 cursor-grab active:cursor-grabbing',
                     schedule.isPinned && 'ring-2 ring-warning-200 bg-warning-50/30'
                   )}
                 >
@@ -346,27 +399,62 @@ export default function Schedule() {
               {weekDays.map((date, idx) => {
                 const hasSchedule = hasScheduleOnDate(date);
                 const today = isToday(date);
+                const isSelected = selectedDate && isSameDate(date, selectedDate);
+                const isDragOver = dragOverDate && isSameDate(date, dragOverDate);
                 return (
                   <div
                     key={idx}
+                    onClick={() => setSelectedDate(date)}
+                    onDragOver={(e) => handleDragOver(e, date)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, date)}
                     className={cn(
-                      'relative aspect-square flex items-center justify-center rounded-lg text-xs font-medium transition-all duration-200',
-                      today && 'bg-primary-500 text-white shadow-md',
-                      !today && hasSchedule && 'bg-primary-50 text-primary-700',
-                      !today && !hasSchedule && 'text-neutral-600 hover:bg-neutral-50'
+                      'relative aspect-square flex items-center justify-center rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer',
+                      today && !isDragOver && !isSelected && 'bg-primary-500 text-white shadow-md',
+                      !today && hasSchedule && !isDragOver && !isSelected && 'bg-primary-50 text-primary-700',
+                      !today && !hasSchedule && !isDragOver && !isSelected && 'text-neutral-600 hover:bg-neutral-50',
+                      isSelected && !isDragOver && 'ring-2 ring-primary-500 bg-primary-100 text-primary-700',
+                      isDragOver && 'bg-primary-200 text-primary-800 ring-2 ring-primary-400 scale-105'
                     )}
                   >
                     {date.getDate()}
-                    {hasSchedule && !today && (
+                    {hasSchedule && !today && !isDragOver && (
                       <span className="absolute bottom-1 w-1 h-1 rounded-full bg-primary-500" />
                     )}
-                    {hasSchedule && today && (
+                    {hasSchedule && today && !isDragOver && (
                       <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />
                     )}
                   </div>
                 );
               })}
             </div>
+            {selectedDate && (
+              <div className="mt-5 pt-5 border-t border-neutral-100">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium text-neutral-800">
+                    {selectedDate.getMonth() + 1}月{selectedDate.getDate()}日 排期
+                  </h4>
+                  <span className="text-xs text-neutral-500">{selectedDateSchedules.length} 条</span>
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {selectedDateSchedules.length === 0 ? (
+                    <p className="text-xs text-neutral-400 py-2 text-center">暂无排期</p>
+                  ) : (
+                    selectedDateSchedules.map((schedule) => (
+                      <div
+                        key={schedule.id}
+                        className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg bg-neutral-50"
+                      >
+                        <span className="text-xs text-neutral-700 truncate flex-1">{schedule.title}</span>
+                        <Badge variant={statusConfig[schedule.status].variant} className="px-2 py-0.5 text-[10px]">
+                          {statusConfig[schedule.status].label}
+                        </Badge>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
             <div className="mt-5 pt-5 border-t border-neutral-100 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">

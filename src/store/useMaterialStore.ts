@@ -51,6 +51,9 @@ interface MaterialState extends PersistedState {
   deleteMaterial: (id: string) => void;
   setSearch: (query: string) => void;
   setFilter: (type: 'all' | MaterialType) => void;
+  addTagsToMaterials: (ids: string[], tags: string[]) => void;
+  setMaterialsTags: (ids: string[], tags: string[]) => void;
+  batchDeleteMaterials: (ids: string[]) => void;
 }
 
 const initialState = loadFromStorage();
@@ -86,6 +89,42 @@ export const useMaterialStore = create<MaterialState>((set) => ({
   setFilter: (type) =>
     set((state) => {
       const newState = { filterType: type };
+      saveToStorage({ ...state, ...newState });
+      return newState;
+    }),
+  addTagsToMaterials: (ids, tags) =>
+    set((state) => {
+      const idSet = new Set(ids);
+      const newState = {
+        materials: state.materials.map((m) =>
+          idSet.has(m.id)
+            ? {
+                ...m,
+                tags: Array.from(new Set([...m.tags, ...tags])),
+              }
+            : m
+        ),
+      };
+      saveToStorage({ ...state, ...newState });
+      return newState;
+    }),
+  setMaterialsTags: (ids, tags) =>
+    set((state) => {
+      const idSet = new Set(ids);
+      const newState = {
+        materials: state.materials.map((m) =>
+          idSet.has(m.id) ? { ...m, tags: [...tags] } : m
+        ),
+      };
+      saveToStorage({ ...state, ...newState });
+      return newState;
+    }),
+  batchDeleteMaterials: (ids) =>
+    set((state) => {
+      const idSet = new Set(ids);
+      const newState = {
+        materials: state.materials.filter((m) => !idSet.has(m.id)),
+      };
       saveToStorage({ ...state, ...newState });
       return newState;
     }),

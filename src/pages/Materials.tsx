@@ -7,6 +7,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Upload,
+  Trash2,
+  Tag,
+  X,
+  Check,
 } from 'lucide-react';
 import MaterialUploader from '@/components/features/MaterialUploader';
 import MaterialCard from '@/components/features/MaterialCard';
@@ -45,6 +49,9 @@ export default function Materials() {
     setSearch,
     setFilter,
     deleteMaterial,
+    addTagsToMaterials,
+    setMaterialsTags,
+    batchDeleteMaterials,
   } = useMaterialStore();
 
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -52,6 +59,9 @@ export default function Materials() {
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showTagEditor, setShowTagEditor] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const [tagMode, setTagMode] = useState<'append' | 'overwrite'>('append');
 
   const filteredMaterials = useMemo(() => {
     let result = [...materials];
@@ -117,6 +127,37 @@ export default function Materials() {
     console.log('Preview material:', material);
   };
 
+  const handleBatchDelete = () => {
+    batchDeleteMaterials(Array.from(selectedIds));
+    setSelectedIds(new Set());
+  };
+
+  const handleBatchTags = () => {
+    const tags = tagInput
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    if (tags.length === 0) return;
+    if (tagMode === 'append') {
+      addTagsToMaterials(Array.from(selectedIds), tags);
+    } else {
+      setMaterialsTags(Array.from(selectedIds), tags);
+    }
+    setShowTagEditor(false);
+    setTagInput('');
+  };
+
+  const openTagEditor = () => {
+    setShowTagEditor(true);
+    setTagInput('');
+    setTagMode('append');
+  };
+
+  const closeTagEditor = () => {
+    setShowTagEditor(false);
+    setTagInput('');
+  };
+
   const currentSortLabel =
     SORT_OPTIONS.find((o) => o.value === sortBy)?.label || SORT_OPTIONS[0].label;
 
@@ -135,6 +176,117 @@ export default function Materials() {
             <MaterialUploader onMaterialCreated={(m) => addMaterial(m)} />
           </CardContent>
         </Card>
+
+        {selectedIds.size > 0 && (
+          <div className="bg-primary-50 border border-primary-200 rounded-2xl px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-slide-up">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-primary-700">
+                已选中 {selectedIds.size} 个
+              </span>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-neutral-500 hover:text-neutral-700 underline"
+              >
+                取消选择
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                icon={<Tag className="w-4 h-4" />}
+                onClick={openTagEditor}
+              >
+                批量改标签
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                icon={<Trash2 className="w-4 h-4" />}
+                onClick={handleBatchDelete}
+              >
+                批量删除
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {showTagEditor && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-slide-up">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-neutral-800">
+                  批量修改标签
+                </h3>
+                <button
+                  onClick={closeTagEditor}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    标签（逗号分隔多个）
+                  </label>
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    placeholder="例如: 宣传, 产品, 2024"
+                    className="input"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    操作方式
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setTagMode('append')}
+                      className={cn(
+                        'flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all',
+                        tagMode === 'append'
+                          ? 'border-primary-500 bg-primary-50 text-primary-700'
+                          : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'
+                      )}
+                    >
+                      {tagMode === 'append' && <Check className="w-4 h-4" />}
+                      追加标签
+                    </button>
+                    <button
+                      onClick={() => setTagMode('overwrite')}
+                      className={cn(
+                        'flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all',
+                        tagMode === 'overwrite'
+                          ? 'border-primary-500 bg-primary-50 text-primary-700'
+                          : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'
+                      )}
+                    >
+                      {tagMode === 'overwrite' && <Check className="w-4 h-4" />}
+                      覆盖标签
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 mt-6">
+                <Button variant="ghost" size="sm" onClick={closeTagEditor}>
+                  取消
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleBatchTags}
+                  disabled={!tagInput.trim()}
+                >
+                  确认
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Card>
           <div className="px-6 py-4 border-b border-neutral-100 flex flex-col lg:flex-row lg:items-center gap-4">

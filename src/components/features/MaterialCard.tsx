@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Eye, Trash2, Play, FileVideo, Image, FileText, Music } from 'lucide-react';
-import { cn, formatDuration, formatFileSize } from '@/utils/format';
+import { cn, formatDuration, formatFileSize, formatDate } from '@/utils/format';
 import type { Material, MaterialType } from '@/types';
 import { MATERIAL_TYPE_LABELS, MATERIAL_TYPE_COLORS } from '@/utils/constants';
 
@@ -45,12 +45,7 @@ export default function MaterialCard({
     onDelete?.(material);
   };
 
-  const getMetaText = () => {
-    if (material.type === 'video' || material.type === 'music') {
-      return material.duration ? formatDuration(material.duration) : formatFileSize(material.size);
-    }
-    return formatFileSize(material.size);
-  };
+  const showDuration = material.type === 'video' || material.type === 'music';
 
   return (
     <div
@@ -139,14 +134,34 @@ export default function MaterialCard({
         </div>
       </div>
 
-      <div className="p-4">
-        <h4 className="text-sm font-semibold text-neutral-800 truncate mb-2" title={material.name}>
+      <div className="p-4 space-y-2">
+        <div className="flex items-center gap-2 mb-1">
+          <span
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border',
+              MATERIAL_TYPE_COLORS[material.type]
+            )}
+          >
+            <Icon className="w-3 h-3" />
+            {MATERIAL_TYPE_LABELS[material.type]}
+          </span>
+        </div>
+        <h4 className="text-sm font-semibold text-neutral-800 truncate" title={material.name}>
           {material.name}
         </h4>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-neutral-500">{getMetaText()}</span>
-          <div className="flex items-center gap-1">
-            {material.tags.slice(0, 2).map((tag, index) => (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+          {showDuration && material.duration && (
+            <span className="flex items-center gap-1">
+              <Play className="w-3 h-3 fill-current" />
+              {formatDuration(material.duration)}
+            </span>
+          )}
+          <span>{formatFileSize(material.size)}</span>
+          <span>{formatDate(material.createdAt)}</span>
+        </div>
+        {material.tags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 pt-1">
+            {material.tags.slice(0, 3).map((tag, index) => (
               <span
                 key={index}
                 className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600"
@@ -154,13 +169,13 @@ export default function MaterialCard({
                 {tag}
               </span>
             ))}
-            {material.tags.length > 2 && (
+            {material.tags.length > 3 && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600">
-                +{material.tags.length - 2}
+                +{material.tags.length - 3}
               </span>
             )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

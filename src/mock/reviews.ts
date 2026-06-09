@@ -5,6 +5,7 @@ export const reviews: Review[] = [
     id: 'r001',
     videoId: 'v001',
     status: 'pending',
+    requiredRoles: ['reviewer', 'publisher'],
     sensitiveWords: [
       {
         word: '最棒',
@@ -41,6 +42,7 @@ export const reviews: Review[] = [
       {
         reviewerId: 'u003',
         reviewerName: '李审核',
+        role: 'reviewer',
         action: 'approve',
         comment: '内容整体良好，建议修改敏感词表述',
         timestamp: '2024-08-28 10:30:00',
@@ -51,6 +53,7 @@ export const reviews: Review[] = [
     id: 'r002',
     videoId: 'v002',
     status: 'approved',
+    requiredRoles: ['reviewer', 'publisher'],
     sensitiveWords: [],
     copyrights: [
       {
@@ -76,6 +79,7 @@ export const reviews: Review[] = [
       {
         reviewerId: 'u003',
         reviewerName: '李审核',
+        role: 'reviewer',
         action: 'approve',
         comment: '内容符合要求，字体授权请后续跟进',
         timestamp: '2024-08-27 14:20:00',
@@ -83,9 +87,18 @@ export const reviews: Review[] = [
       {
         reviewerId: 'u004',
         reviewerName: '王审阅',
+        role: 'reviewer',
         action: 'approve',
         comment: '同意通过',
         timestamp: '2024-08-27 15:45:00',
+      },
+      {
+        reviewerId: 'u005',
+        reviewerName: '陈发布',
+        role: 'publisher',
+        action: 'approve',
+        comment: '已确认发布',
+        timestamp: '2024-08-27 17:00:00',
       },
     ],
   },
@@ -93,6 +106,7 @@ export const reviews: Review[] = [
     id: 'r003',
     videoId: 'v003',
     status: 'rejected',
+    requiredRoles: ['reviewer', 'publisher'],
     sensitiveWords: [
       {
         word: '国家级',
@@ -129,6 +143,7 @@ export const reviews: Review[] = [
       {
         reviewerId: 'u003',
         reviewerName: '李审核',
+        role: 'reviewer',
         action: 'reject',
         comment: '存在多处敏感词和严重版权问题，请修改后重新提交',
         timestamp: '2024-08-26 11:00:00',
@@ -139,6 +154,7 @@ export const reviews: Review[] = [
     id: 'r004',
     videoId: 'v004',
     status: 'approved',
+    requiredRoles: ['reviewer', 'publisher'],
     sensitiveWords: [],
     copyrights: [
       {
@@ -164,6 +180,7 @@ export const reviews: Review[] = [
       {
         reviewerId: 'u004',
         reviewerName: '王审阅',
+        role: 'reviewer',
         action: 'approve',
         comment: '原创素材，内容规范，通过审核',
         timestamp: '2024-08-25 09:30:00',
@@ -171,9 +188,18 @@ export const reviews: Review[] = [
       {
         reviewerId: 'u003',
         reviewerName: '李审核',
+        role: 'reviewer',
         action: 'approve',
         comment: '同意通过',
         timestamp: '2024-08-25 10:15:00',
+      },
+      {
+        reviewerId: 'u005',
+        reviewerName: '陈发布',
+        role: 'publisher',
+        action: 'approve',
+        comment: '已确认发布',
+        timestamp: '2024-08-25 11:30:00',
       },
     ],
   },

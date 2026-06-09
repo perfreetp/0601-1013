@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Search, UserPlus, Trash2, ChevronDown, Shield, Pencil, Eye, FileCheck, Rocket } from 'lucide-react';
+import { Search, UserPlus, Trash2, ChevronDown, Shield, Pencil, Eye, FileCheck, Rocket, ArrowRight } from 'lucide-react';
 import { useMemberStore } from '@/store/useMemberStore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
+import { Modal, ModalBody } from '@/components/ui/Modal';
 import { cn } from '@/utils/format';
 import { ROLE_LABELS, ROLE_COLORS } from '@/utils/constants';
 import type { MemberRole, OperationLog } from '@/types';
@@ -36,7 +37,9 @@ export default function Members() {
   const { members, logs, searchQuery, setSearch, removeMember, updateMemberRole } = useMemberStore();
   const [logFilterMember, setLogFilterMember] = useState<string>('all');
   const [logFilterAction, setLogFilterAction] = useState<string>('all');
+  const [logFilterTargetMember, setLogFilterTargetMember] = useState<string>('all');
   const [openRoleDropdown, setOpenRoleDropdown] = useState<string | null>(null);
+  const [selectedLog, setSelectedLog] = useState<OperationLog | null>(null);
 
   const filteredMembers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -61,8 +64,11 @@ export default function Members() {
     if (logFilterAction !== 'all') {
       result = result.filter((l) => l.action === logFilterAction);
     }
+    if (logFilterTargetMember !== 'all') {
+      result = result.filter((l) => l.targetMemberId === logFilterTargetMember);
+    }
     return result.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [logs, logFilterMember, logFilterAction]);
+  }, [logs, logFilterMember, logFilterAction, logFilterTargetMember]);
 
   const handleRoleChange = (memberId: string, role: MemberRole) => {
     updateMemberRole(memberId, role);
@@ -84,9 +90,25 @@ export default function Members() {
     return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
   };
 
+  const formatPreciseTime = (ts: string) => {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return ts;
+    const y = d.getFullYear();
+    const m = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    const h = d.getHours().toString().padStart(2, '0');
+    const min = d.getMinutes().toString().padStart(2, '0');
+    const s = d.getSeconds().toString().padStart(2, '0');
+    return `${y}-${m}-${day} ${h}:${min}:${s}`;
+  };
+
   const getMemberAvatar = (memberId: string) => {
     const m = members.find((x) => x.id === memberId);
     return m?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${memberId}`;
+  };
+
+  const getMemberById = (memberId: string) => {
+    return members.find((x) => x.id === memberId);
   };
 
   const getActionColor = (action: string) => {
@@ -268,25 +290,37 @@ export default function Members() {
                   <CardDescription>共 {filteredLogs.length} 条记录</CardDescription>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <select
+                    value={logFilterMember}
+                    onChange={(e) => setLogFilterMember(e.target.value)}
+                    className="input py-2 text-xs !px-3 flex-1 bg-white"
+                  >
+                    <option value="all">操作人</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={logFilterAction}
+                    onChange={(e) => setLogFilterAction(e.target.value)}
+                    className="input py-2 text-xs !px-3 flex-1 bg-white"
+                  >
+                    <option value="all">操作类型</option>
+                    {actionTypes.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                </div>
                 <select
-                  value={logFilterMember}
-                  onChange={(e) => setLogFilterMember(e.target.value)}
-                  className="input py-2 text-xs !px-3 flex-1 bg-white"
+                  value={logFilterTargetMember}
+                  onChange={(e) => setLogFilterTargetMember(e.target.value)}
+                  className="input py-2 text-xs !px-3 w-full bg-white"
                 >
-                  <option value="all">全部成员</option>
+                  <option value="all">被操作成员</option>
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={logFilterAction}
-                  onChange={(e) => setLogFilterAction(e.target.value)}
-                  className="input py-2 text-xs !px-3 flex-1 bg-white"
-                >
-                  <option value="all">全部操作</option>
-                  {actionTypes.map((a) => (
-                    <option key={a} value={a}>{a}</option>
                   ))}
                 </select>
               </div>
@@ -300,8 +334,9 @@ export default function Members() {
                   filteredLogs.map((log: OperationLog, idx: number) => (
                     <div
                       key={log.id}
-                      className="relative mb-5 last:mb-0"
+                      className="relative mb-5 last:mb-0 cursor-pointer"
                       style={{ animation: `slideIn 0.4s ease-out ${idx * 0.04}s both` }}
+                      onClick={() => setSelectedLog(log)}
                     >
                       <div className={cn(
                         'absolute -left-[26px] top-1 w-4 h-4 rounded-full border-4 border-white shadow-md transition-transform duration-300 hover:scale-125',
@@ -334,6 +369,104 @@ export default function Members() {
           </Card>
         </div>
       </div>
+
+      <Modal
+        open={selectedLog !== null}
+        onClose={() => setSelectedLog(null)}
+        title="操作日志详情"
+      >
+        {selectedLog && (
+          <ModalBody>
+            <div className="space-y-5">
+              <div className="flex items-center gap-4">
+                <img
+                  src={getMemberAvatar(selectedLog.operatorId || selectedLog.memberId)}
+                  alt={selectedLog.operatorName || selectedLog.memberName}
+                  className="w-14 h-14 rounded-full bg-neutral-100 ring-2 ring-white shadow-md"
+                />
+                <div>
+                  <p className="text-base font-semibold text-neutral-800">
+                    {selectedLog.operatorName || selectedLog.memberName}
+                  </p>
+                  <p className="text-sm text-neutral-500 mt-0.5">
+                    操作人
+                  </p>
+                </div>
+                <Badge variant="primary" className="ml-auto">
+                  {selectedLog.action}
+                </Badge>
+              </div>
+
+              <div className="h-px bg-neutral-100" />
+
+              {selectedLog.targetMemberId && (
+                <div className="flex items-center gap-4">
+                  {(() => {
+                    const targetMember = getMemberById(selectedLog.targetMemberId!);
+                    return (
+                      <>
+                        <img
+                          src={getMemberAvatar(selectedLog.targetMemberId!)}
+                          alt={targetMember?.name || '未知成员'}
+                          className="w-12 h-12 rounded-full bg-neutral-100 ring-2 ring-white shadow-sm"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-neutral-800">
+                            {targetMember?.name || '未知成员'}
+                          </p>
+                          {targetMember?.email && (
+                            <p className="text-xs text-neutral-400 mt-0.5">{targetMember.email}</p>
+                          )}
+                          <p className="text-xs text-neutral-500 mt-1">被操作成员</p>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {(selectedLog.oldValue || selectedLog.newValue) && (
+                <div className="bg-neutral-50 rounded-xl p-4">
+                  <p className="text-xs font-medium text-neutral-500 mb-3">变更内容</p>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {selectedLog.oldValue && (
+                      <div className="bg-white rounded-lg px-4 py-2.5 border border-neutral-200">
+                        <p className="text-[11px] text-neutral-400 mb-1">变更前</p>
+                        <p className="text-sm font-medium text-neutral-700">{selectedLog.oldValue}</p>
+                      </div>
+                    )}
+                    <ArrowRight className="w-4 h-4 text-neutral-300 flex-shrink-0" />
+                    {selectedLog.newValue && (
+                      <div className="bg-primary-50 rounded-lg px-4 py-2.5 border border-primary-200">
+                        <p className="text-[11px] text-primary-500 mb-1">变更后</p>
+                        <p className="text-sm font-medium text-primary-700">{selectedLog.newValue}</p>
+                      </div>
+                    )}
+                    {!selectedLog.newValue && selectedLog.oldValue && (
+                      <div className="bg-danger-50 rounded-lg px-4 py-2.5 border border-danger-200">
+                        <p className="text-[11px] text-danger-500 mb-1">状态</p>
+                        <p className="text-sm font-medium text-danger-700">已移除</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-neutral-50 rounded-xl p-4">
+                <p className="text-xs font-medium text-neutral-500 mb-2">操作目标</p>
+                <p className="text-sm text-neutral-700">{selectedLog.target}</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-neutral-300" />
+                <p className="text-xs text-neutral-500">
+                  {formatPreciseTime(selectedLog.timestamp)}
+                </p>
+              </div>
+            </div>
+          </ModalBody>
+        )}
+      </Modal>
     </div>
   );
 }

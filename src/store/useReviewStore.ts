@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Review, ReviewRecord } from '@/types';
+import type { MemberRole, Review, ReviewRecord } from '@/types';
 import { reviews as initialReviews } from '@/mock/reviews';
 
 const STORAGE_KEY = 'club-video-reviews';
@@ -24,32 +24,50 @@ const saveReviews = (reviews: Review[]) => {
   }
 };
 
+type FilterStatus = 'all' | 'pending' | 'approved' | 'rejected';
+
 interface ReviewState {
   reviews: Review[];
   selectedReviewId: string | null;
+  filterStatus: FilterStatus;
   selectReview: (id: string | null) => void;
-  approveReview: (id: string, record: Omit<ReviewRecord, 'action'>) => void;
-  rejectReview: (id: string, record: Omit<ReviewRecord, 'action'>) => void;
+  setFilterStatus: (status: FilterStatus) => void;
+  approveReview: (id: string, record: Omit<ReviewRecord, 'action' | 'role'> & { role?: MemberRole }) => void;
+  rejectReview: (id: string, record: Omit<ReviewRecord, 'action' | 'role'> & { role?: MemberRole }) => void;
   addComment: (id: string, record: ReviewRecord) => void;
 }
 
-export const useReviewStore = create<ReviewState>((set) => ({
+export const useReviewStore = create<ReviewState>((set, get) => ({
   reviews: loadReviews(),
   selectedReviewId: null,
+  filterStatus: 'all',
   selectReview: (id) => set({ selectedReviewId: id }),
+  setFilterStatus: (status) => set({ filterStatus: status }),
   approveReview: (id, record) =>
     set((state) => {
       const review = state.reviews.find((r) => r.id === id);
       if (!review || review.status !== 'pending') {
         return state;
       }
+      const newRecord: ReviewRecord = {
+        ...record,
+        role: record.role || 'reviewer',
+        action: 'approve',
+      };
       const newReviews = state.reviews.map((r) =>
         r.id === id
-          ? { ...r, status: 'approved' as const, records: [...r.records, { ...record, action: 'approve' as const }] }
+          ? { ...r, status: 'approved' as const, records: [...r.records, newRecord] }
           : r
       );
       saveReviews(newReviews);
-      return { reviews: newReviews };
+
+      let newSelectedReviewId = state.selectedReviewId;
+      if (state.filterStatus === 'pending') {
+        const remainingPending = newReviews.filter((r) => r.status === 'pending' && r.id !== id);
+        newSelectedReviewId = remainingPending.length > 0 ? remainingPending[0].id : null;
+      }
+
+      return { reviews: newReviews, selectedReviewId: newSelectedReviewId };
     }),
   rejectReview: (id, record) =>
     set((state) => {
@@ -57,13 +75,25 @@ export const useReviewStore = create<ReviewState>((set) => ({
       if (!review || review.status !== 'pending') {
         return state;
       }
+      const newRecord: ReviewRecord = {
+        ...record,
+        role: record.role || 'reviewer',
+        action: 'reject',
+      };
       const newReviews = state.reviews.map((r) =>
         r.id === id
-          ? { ...r, status: 'rejected' as const, records: [...r.records, { ...record, action: 'reject' as const }] }
+          ? { ...r, status: 'rejected' as const, records: [...r.records, newRecord] }
           : r
       );
       saveReviews(newReviews);
-      return { reviews: newReviews };
+
+      let newSelectedReviewId = state.selectedReviewId;
+      if (state.filterStatus === 'pending') {
+        const remainingPending = newReviews.filter((r) => r.status === 'pending' && r.id !== id);
+        newSelectedReviewId = remainingPending.length > 0 ? remainingPending[0].id : null;
+      }
+
+      return { reviews: newReviews, selectedReviewId: newSelectedReviewId };
     }),
   addComment: (id, record) =>
     set((state) => {
