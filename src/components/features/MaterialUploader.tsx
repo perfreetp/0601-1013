@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, FileVideo, Image, FileText, Music, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { cn, formatFileSize } from '@/utils/format';
-import type { MaterialType } from '@/types';
+import type { Material, MaterialType } from '@/types';
 import { MATERIAL_TYPE_LABELS, MATERIAL_TYPE_COLORS } from '@/utils/constants';
 
 interface UploadingFile {
@@ -19,6 +19,7 @@ interface MaterialUploaderProps {
   acceptedTypes?: MaterialType[];
   onUploadComplete?: (files: UploadingFile[]) => void;
   onUploadError?: (file: UploadingFile) => void;
+  onMaterialCreated?: (material: Material) => void;
 }
 
 const ACCEPT_MAP: Record<MaterialType, string> = {
@@ -44,11 +45,28 @@ function detectFileType(file: File): MaterialType | null {
   return null;
 }
 
+function uploadingFileToMaterial(uploadingFile: UploadingFile): Material {
+  const shouldHaveDuration = uploadingFile.type === 'video' || uploadingFile.type === 'music';
+  const randomSeed = Math.floor(Math.random() * 1000);
+  return {
+    id: uploadingFile.id,
+    name: uploadingFile.name,
+    type: uploadingFile.type,
+    url: '',
+    size: uploadingFile.size,
+    duration: shouldHaveDuration ? Math.floor(Math.random() * 111) + 10 : undefined,
+    cover: `https://picsum.photos/seed/${randomSeed}/400/300`,
+    tags: [],
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export default function MaterialUploader({
   className,
   acceptedTypes = ['video', 'image', 'subtitle', 'music'],
   onUploadComplete,
   onUploadError,
+  onMaterialCreated,
 }: MaterialUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
@@ -56,51 +74,56 @@ export default function MaterialUploader({
 
   const acceptedMimeTypes = acceptedTypes.map((t) => ACCEPT_MAP[t]).join(',');
 
-  const simulateUpload = useCallback((file: File, detectedType: MaterialType) => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const uploadingFile: UploadingFile = {
-      id,
-      name: file.name,
-      size: file.size,
-      type: detectedType,
-      progress: 0,
-      status: 'uploading',
-    };
+  const simulateUpload = useCallback(
+    (file: File, detectedType: MaterialType) => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const uploadingFile: UploadingFile = {
+        id,
+        name: file.name,
+        size: file.size,
+        type: detectedType,
+        progress: 0,
+        status: 'uploading',
+      };
 
-    setUploadingFiles((prev) => [...prev, uploadingFile]);
+      setUploadingFiles((prev) => [...prev, uploadingFile]);
 
-    const totalSteps = 10;
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      currentStep += 1;
-      const progress = Math.min((currentStep / totalSteps) * 100, 100);
-      const isSuccess = Math.random() > 0.1;
+      const totalSteps = 10;
+      let currentStep = 0;
+      const interval = setInterval(() => {
+        currentStep += 1;
+        const progress = Math.min((currentStep / totalSteps) * 100, 100);
+        const isSuccess = Math.random() > 0.1;
 
-      setUploadingFiles((prev) =>
-        prev.map((f) => {
-          if (f.id !== id) return f;
-          if (progress >= 100) {
-            clearInterval(interval);
-            const finalFile: UploadingFile = {
-              ...f,
-              progress: 100,
-              status: isSuccess ? 'success' : 'error',
-              errorMessage: isSuccess ? undefined : '上传失败，请重试',
-            };
-            if (isSuccess) {
-              onUploadComplete?.([finalFile]);
-            } else {
-              onUploadError?.(finalFile);
+        setUploadingFiles((prev) =>
+          prev.map((f) => {
+            if (f.id !== id) return f;
+            if (progress >= 100) {
+              clearInterval(interval);
+              const finalFile: UploadingFile = {
+                ...f,
+                progress: 100,
+                status: isSuccess ? 'success' : 'error',
+                errorMessage: isSuccess ? undefined : '上传失败，请重试',
+              };
+              if (isSuccess) {
+                onUploadComplete?.([finalFile]);
+                const material = uploadingFileToMaterial(finalFile);
+                onMaterialCreated?.(material);
+              } else {
+                onUploadError?.(finalFile);
+              }
+              return finalFile;
             }
-            return finalFile;
-          }
-          return { ...f, progress };
-        })
-      );
-    }, 200);
+            return { ...f, progress };
+          })
+        );
+      }, 200);
 
-    return id;
-  }, [onUploadComplete, onUploadError]);
+      return id;
+    },
+    [onUploadComplete, onUploadError, onMaterialCreated]
+  );
 
   const handleFiles = useCallback(
     (files: FileList) => {

@@ -14,9 +14,11 @@ import Tabs from '@/components/ui/Tabs';
 import { Card } from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
+import Switch from '@/components/ui/Switch';
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
 import { useScheduleStore } from '@/store/useScheduleStore';
 import { cn, formatDate } from '@/utils/format';
-import type { ScheduleStatus } from '@/types';
+import type { Schedule, ScheduleStatus } from '@/types';
 
 const statusTabs = [
   { value: 'pending', label: '待发布' },
@@ -33,10 +35,45 @@ const statusConfig: Record<
   offline: { label: '已下架', variant: 'default', dotColor: 'bg-neutral-400' },
 };
 
+const toLocalInput = (dateStr?: string) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr.replace(' ', 'T'));
+  if (isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const fromLocalInput = (localStr: string) => {
+  if (!localStr) return '';
+  return localStr.replace('T', ' ') + ':00';
+};
+
+type FormData = {
+  title: string;
+  videoId: string;
+  publishAt: string;
+  offlineAt: string;
+  isPinned: boolean;
+  status: ScheduleStatus;
+};
+
+const emptyFormData: FormData = {
+  title: '',
+  videoId: '',
+  publishAt: '',
+  offlineAt: '',
+  isPinned: false,
+  status: 'pending',
+};
+
 export default function Schedule() {
-  const { schedules, togglePin, updateStatus, deleteSchedule } = useScheduleStore();
+  const { schedules, addSchedule, updateSchedule, togglePin, updateStatus, deleteSchedule } =
+    useScheduleStore();
   const [activeStatus, setActiveStatus] = useState<ScheduleStatus>('pending');
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+  const [showModal, setShowModal] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [formData, setFormData] = useState<FormData>(emptyFormData);
 
   const showToast = (message: string) => {
     setToast({ show: true, message });
@@ -67,6 +104,64 @@ export default function Schedule() {
   const handleDelete = (id: string, title: string) => {
     deleteSchedule(id);
     showToast(`已删除「${title}」`);
+  };
+
+  const handleOpenCreate = () => {
+    setFormData(emptyFormData);
+    setEditingSchedule(null);
+    setShowModal(true);
+  };
+
+  const handleOpenEdit = (schedule: Schedule) => {
+    setFormData({
+      title: schedule.title,
+      videoId: schedule.videoId,
+      publishAt: toLocalInput(schedule.publishAt),
+      offlineAt: toLocalInput(schedule.offlineAt),
+      isPinned: schedule.isPinned,
+      status: schedule.status,
+    });
+    setEditingSchedule(schedule);
+    setShowModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setEditingSchedule(null);
+    setFormData(emptyFormData);
+  };
+
+  const handleSave = () => {
+    if (!formData.title.trim()) {
+      showToast('请输入排期标题');
+      return;
+    }
+    if (!formData.videoId.trim()) {
+      showToast('请输入视频 ID');
+      return;
+    }
+    if (!formData.publishAt) {
+      showToast('请选择发布时间');
+      return;
+    }
+
+    const payload = {
+      title: formData.title.trim(),
+      videoId: formData.videoId.trim(),
+      publishAt: fromLocalInput(formData.publishAt),
+      offlineAt: formData.offlineAt ? fromLocalInput(formData.offlineAt) : undefined,
+      isPinned: formData.isPinned,
+      status: formData.status,
+    };
+
+    if (editingSchedule) {
+      updateSchedule(editingSchedule.id, payload);
+      showToast(`已更新「${payload.title}」`);
+    } else {
+      addSchedule(payload);
+      showToast(`已创建「${payload.title}」`);
+    }
+    handleCloseModal();
   };
 
   const getWeekDays = () => {
@@ -100,217 +195,301 @@ export default function Schedule() {
 
   return (
     <div className="flex flex-col h-full gap-6 animate-fade-in">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="section-title">发布排期</h1>
-            <p className="section-subtitle">管理内容发布时间，设置置顶与下架策略</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="section-title">发布排期</h1>
+          <p className="section-subtitle">管理内容发布时间，设置置顶与下架策略</p>
+        </div>
+        <Button variant="accent" icon={<Plus className="w-4 h-4" />} onClick={handleOpenCreate}>
+          新建排期
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0">
+        <div className="lg:col-span-3 flex flex-col min-h-0">
+          <Tabs
+            value={activeStatus}
+            onChange={(v) => setActiveStatus(v as ScheduleStatus)}
+            items={statusTabs}
+            className="mb-6"
+          />
+
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+            {filteredSchedules.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-neutral-400">
+                <Calendar className="w-12 h-12 mb-4 opacity-50" />
+                <p className="text-sm">暂无{statusConfig[activeStatus].label}的排期</p>
+              </div>
+            ) : (
+              filteredSchedules.map((schedule) => (
+                <Card
+                  key={schedule.id}
+                  hover
+                  className={cn(
+                    'p-4 transition-all duration-300',
+                    schedule.isPinned && 'ring-2 ring-warning-200 bg-warning-50/30'
+                  )}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="relative w-32 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-neutral-100">
+                      <img
+                        src={`https://picsum.photos/seed/${schedule.videoId}/160/100`}
+                        alt={schedule.title}
+                        className="w-full h-full object-cover"
+                      />
+                      {schedule.isPinned && (
+                        <div className="absolute top-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-warning-500 text-white text-[10px] font-medium">
+                          <Pin className="w-3 h-3" />
+                          置顶
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-semibold text-neutral-800 truncate">{schedule.title}</h3>
+                        <Badge variant={statusConfig[schedule.status].variant}>
+                          <span
+                            className={cn('w-1.5 h-1.5 rounded-full', statusConfig[schedule.status].dotColor)}
+                          />
+                          {statusConfig[schedule.status].label}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span>发布时间: {formatDate(schedule.publishAt)}</span>
+                        </div>
+                        {schedule.offlineAt && (
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>下架时间: {formatDate(schedule.offlineAt)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={schedule.isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                        className={cn(schedule.isPinned && 'text-warning-600 hover:text-warning-700')}
+                        onClick={() => handleTogglePin(schedule.id, schedule.title)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Edit3 className="w-4 h-4" />}
+                        onClick={() => handleOpenEdit(schedule)}
+                      />
+                      {schedule.status === 'pending' && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          icon={<UploadCloud className="w-4 h-4" />}
+                          onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'published')}
+                        >
+                          发布
+                        </Button>
+                      )}
+                      {schedule.status === 'published' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          icon={<Archive className="w-4 h-4" />}
+                          onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'offline')}
+                        >
+                          下架
+                        </Button>
+                      )}
+                      {schedule.status === 'offline' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          icon={<UploadCloud className="w-4 h-4" />}
+                          onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'pending')}
+                        >
+                          重新排期
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Trash2 className="w-4 h-4 text-danger-500" />}
+                        className="hover:bg-danger-50"
+                        onClick={() => handleDelete(schedule.id, schedule.title)}
+                      />
+                    </div>
+                  </div>
+                </Card>
+              ))
+            )}
           </div>
-          <Button variant="accent" icon={<Plus className="w-4 h-4" />}>
-            新建排期
-          </Button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0">
-          <div className="lg:col-span-3 flex flex-col min-h-0">
-            <Tabs
-              value={activeStatus}
-              onChange={(v) => setActiveStatus(v as ScheduleStatus)}
-              items={statusTabs}
-              className="mb-6"
-            />
-
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-              {filteredSchedules.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-neutral-400">
-                  <Calendar className="w-12 h-12 mb-4 opacity-50" />
-                  <p className="text-sm">暂无{statusConfig[activeStatus].label}的排期</p>
+        <div className="lg:col-span-1">
+          <Card className="p-5 sticky top-0">
+            <div className="flex items-center gap-2 mb-5">
+              <Calendar className="w-5 h-5 text-primary-500" />
+              <h3 className="font-semibold text-neutral-800">近7天排期</h3>
+            </div>
+            <div className="grid grid-cols-7 gap-1.5">
+              {weekDayNames.map((name) => (
+                <div
+                  key={name}
+                  className="text-center text-[11px] font-medium text-neutral-400 py-1"
+                >
+                  {name}
                 </div>
-              ) : (
-                filteredSchedules.map((schedule) => (
-                  <Card
-                    key={schedule.id}
-                    hover
+              ))}
+              {weekDays.map((date, idx) => {
+                const hasSchedule = hasScheduleOnDate(date);
+                const today = isToday(date);
+                return (
+                  <div
+                    key={idx}
                     className={cn(
-                      'p-4 transition-all duration-300',
-                      schedule.isPinned && 'ring-2 ring-warning-200 bg-warning-50/30'
+                      'relative aspect-square flex items-center justify-center rounded-lg text-xs font-medium transition-all duration-200',
+                      today && 'bg-primary-500 text-white shadow-md',
+                      !today && hasSchedule && 'bg-primary-50 text-primary-700',
+                      !today && !hasSchedule && 'text-neutral-600 hover:bg-neutral-50'
                     )}
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="relative w-32 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-neutral-100">
-                        <img
-                          src={`https://picsum.photos/seed/${schedule.videoId}/160/100`}
-                          alt={schedule.title}
-                          className="w-full h-full object-cover"
-                        />
-                        {schedule.isPinned && (
-                          <div className="absolute top-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-warning-500 text-white text-[10px] font-medium">
-                            <Pin className="w-3 h-3" />
-                            置顶
-                          </div>
-                        )}
-                      </div>
+                    {date.getDate()}
+                    {hasSchedule && !today && (
+                      <span className="absolute bottom-1 w-1 h-1 rounded-full bg-primary-500" />
+                    )}
+                    {hasSchedule && today && (
+                      <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-5 pt-5 border-t border-neutral-100 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-primary-500" />
+                  <span className="text-neutral-600">有排期</span>
+                </div>
+                <span className="font-medium text-neutral-800">
+                  {schedules.filter((s) => {
+                    const publishDate = new Date(s.publishAt);
+                    const today = new Date();
+                    const weekLater = new Date();
+                    weekLater.setDate(today.getDate() + 7);
+                    return publishDate >= today && publishDate <= weekLater;
+                  }).length} 条
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-warning-500" />
+                  <span className="text-neutral-600">置顶内容</span>
+                </div>
+                <span className="font-medium text-neutral-800">
+                  {schedules.filter((s) => s.isPinned).length} 条
+                </span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold text-neutral-800 truncate">{schedule.title}</h3>
-                          <Badge variant={statusConfig[schedule.status].variant}>
-                            <span
-                              className={cn('w-1.5 h-1.5 rounded-full', statusConfig[schedule.status].dotColor)}
-                            />
-                            {statusConfig[schedule.status].label}
-                          </Badge>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5" />
-                            <span>发布时间: {formatDate(schedule.publishAt)}</span>
-                          </div>
-                          {schedule.offlineAt && (
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5" />
-                              <span>下架时间: {formatDate(schedule.offlineAt)}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+      <Modal open={showModal} onClose={handleCloseModal} title={editingSchedule ? '编辑排期' : '新建排期'}>
+        <ModalBody>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                排期标题 <span className="text-danger-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="请输入排期标题"
+                className="w-full px-3 py-2.5 rounded-lg border border-neutral-200 text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition-colors"
+              />
+            </div>
 
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={schedule.isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-                          className={cn(schedule.isPinned && 'text-warning-600 hover:text-warning-700')}
-                          onClick={() => handleTogglePin(schedule.id, schedule.title)}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={<Edit3 className="w-4 h-4" />}
-                        />
-                        {schedule.status === 'pending' && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            icon={<UploadCloud className="w-4 h-4" />}
-                            onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'published')}
-                          >
-                            发布
-                          </Button>
-                        )}
-                        {schedule.status === 'published' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            icon={<Archive className="w-4 h-4" />}
-                            onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'offline')}
-                          >
-                            下架
-                          </Button>
-                        )}
-                        {schedule.status === 'offline' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            icon={<UploadCloud className="w-4 h-4" />}
-                            onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'pending')}
-                          >
-                            重新排期
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={<Trash2 className="w-4 h-4 text-danger-500" />}
-                          className="hover:bg-danger-50"
-                          onClick={() => handleDelete(schedule.id, schedule.title)}
-                        />
-                      </div>
-                    </div>
-                  </Card>
-                ))
-              )}
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                视频 ID <span className="text-danger-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.videoId}
+                onChange={(e) => setFormData({ ...formData, videoId: e.target.value })}
+                placeholder="请输入视频 ID，如 v001"
+                className="w-full px-3 py-2.5 rounded-lg border border-neutral-200 text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                发布时间 <span className="text-danger-500">*</span>
+              </label>
+              <input
+                type="datetime-local"
+                value={formData.publishAt}
+                onChange={(e) => setFormData({ ...formData, publishAt: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg border border-neutral-200 text-sm text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1.5">下架时间（可选）</label>
+              <input
+                type="datetime-local"
+                value={formData.offlineAt}
+                onChange={(e) => setFormData({ ...formData, offlineAt: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg border border-neutral-200 text-sm text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1.5">状态</label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value as ScheduleStatus })}
+                className="w-full px-3 py-2.5 rounded-lg border border-neutral-200 text-sm text-neutral-800 bg-white focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition-colors"
+              >
+                <option value="pending">待发布</option>
+                <option value="published">已发布</option>
+                <option value="offline">已下架</option>
+              </select>
+            </div>
+
+            <div className="pt-1">
+              <Switch
+                checked={formData.isPinned}
+                onChange={(checked) => setFormData({ ...formData, isPinned: checked })}
+                label="置顶排期"
+              />
             </div>
           </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" onClick={handleCloseModal}>
+            取消
+          </Button>
+          <Button variant="primary" onClick={handleSave}>
+            保存
+          </Button>
+        </ModalFooter>
+      </Modal>
 
-          <div className="lg:col-span-1">
-            <Card className="p-5 sticky top-0">
-              <div className="flex items-center gap-2 mb-5">
-                <Calendar className="w-5 h-5 text-primary-500" />
-                <h3 className="font-semibold text-neutral-800">近7天排期</h3>
-              </div>
-              <div className="grid grid-cols-7 gap-1.5">
-                {weekDayNames.map((name) => (
-                  <div
-                    key={name}
-                    className="text-center text-[11px] font-medium text-neutral-400 py-1"
-                  >
-                    {name}
-                  </div>
-                ))}
-                {weekDays.map((date, idx) => {
-                  const hasSchedule = hasScheduleOnDate(date);
-                  const today = isToday(date);
-                  return (
-                    <div
-                      key={idx}
-                      className={cn(
-                        'relative aspect-square flex items-center justify-center rounded-lg text-xs font-medium transition-all duration-200',
-                        today && 'bg-primary-500 text-white shadow-md',
-                        !today && hasSchedule && 'bg-primary-50 text-primary-700',
-                        !today && !hasSchedule && 'text-neutral-600 hover:bg-neutral-50'
-                      )}
-                    >
-                      {date.getDate()}
-                      {hasSchedule && !today && (
-                        <span className="absolute bottom-1 w-1 h-1 rounded-full bg-primary-500" />
-                      )}
-                      {hasSchedule && today && (
-                        <span className="absolute bottom-1 w-1 h-1 rounded-full bg-white" />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="mt-5 pt-5 border-t border-neutral-100 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-primary-500" />
-                    <span className="text-neutral-600">有排期</span>
-                  </div>
-                  <span className="font-medium text-neutral-800">
-                    {schedules.filter((s) => {
-                      const publishDate = new Date(s.publishAt);
-                      const today = new Date();
-                      const weekLater = new Date();
-                      weekLater.setDate(today.getDate() + 7);
-                      return publishDate >= today && publishDate <= weekLater;
-                    }).length} 条
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-warning-500" />
-                    <span className="text-neutral-600">置顶内容</span>
-                  </div>
-                  <span className="font-medium text-neutral-800">
-                    {schedules.filter((s) => s.isPinned).length} 条
-                  </span>
-                </div>
-              </div>
-            </Card>
-          </div>
+      <div
+        className={cn(
+          'fixed bottom-8 left-1/2 -translate-x-1/2 z-50 transition-all duration-300',
+          toast.show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+        )}
+      >
+        <div className="bg-neutral-800 text-white px-6 py-3 rounded-xl shadow-lg text-sm">
+          {toast.message}
         </div>
-
-        <div
-          className={cn(
-            'fixed bottom-8 left-1/2 -translate-x-1/2 z-50 transition-all duration-300',
-            toast.show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-          )}
-        >
-          <div className="bg-neutral-800 text-white px-6 py-3 rounded-xl shadow-lg text-sm">
-            {toast.message}
-          </div>
-        </div>
+      </div>
     </div>
   );
 }

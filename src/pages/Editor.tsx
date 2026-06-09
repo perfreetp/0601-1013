@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   Upload,
   Image as ImageIcon,
@@ -9,7 +9,7 @@ import {
   X,
 } from 'lucide-react';
 import VideoPlayer from '@/components/features/VideoPlayer';
-import EditorTimeline from '@/components/features/EditorTimeline';
+import EditorTimeline, { TimelineClip } from '@/components/features/EditorTimeline';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -26,19 +26,35 @@ import type { Material, Sticker, MaterialType, VideoStatus } from '@/types';
 
 const DEFAULT_COVER = 'https://picsum.photos/seed/editor-cover/400/225';
 
+const CLIP_COLORS = [
+  'bg-gradient-to-r from-primary-500 to-primary-400',
+  'bg-gradient-to-r from-accent-500 to-accent-400',
+  'bg-gradient-to-r from-success-500 to-success-400',
+  'bg-gradient-to-r from-purple-500 to-purple-400',
+  'bg-gradient-to-r from-pink-500 to-pink-400',
+  'bg-gradient-to-r from-cyan-500 to-cyan-400',
+];
+
 export default function Editor() {
   const { materials } = useMaterialStore();
   const {
     currentProject,
+    clips,
     stickers,
     currentTime,
     duration,
+    totalDuration,
+    playing,
     coverImage,
     addSticker,
     removeSticker,
     updateSticker,
     setTitle,
     setCover,
+    setCurrentTime,
+    addClipFromMaterial,
+    updateClip,
+    togglePlay,
   } = useEditorStore();
 
   const [videoMaterials, setVideoMaterials] = useState<Material[]>([]);
@@ -47,6 +63,16 @@ export default function Editor() {
   const previewRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<'all' | MaterialType>('all');
+  const playingRef = useRef(playing);
+  const durationRef = useRef(duration);
+
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
+
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
 
   const filteredMaterials = activeTab === 'all'
     ? materials
@@ -56,8 +82,44 @@ export default function Editor() {
     setVideoMaterials(materials.filter((m) => m.type === 'video'));
   }, [materials]);
 
+  const timelineClips = useMemo<TimelineClip[]>(() => {
+    return clips.map((clip, index) => {
+      const material = materials.find((m) => m.id === clip.materialId);
+      return {
+        ...clip,
+        color: CLIP_COLORS[index % CLIP_COLORS.length],
+        name: material?.name,
+      };
+    });
+  }, [clips, materials]);
+
+  useEffect(() => {
+    if (!playing) return;
+
+    const interval = setInterval(() => {
+      const currentDuration = durationRef.current || 60;
+      setCurrentTime((prev) => {
+        const next = prev + 0.1;
+        if (next >= currentDuration) {
+          return 0;
+        }
+        return next;
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [playing, setCurrentTime]);
+
   const projectTitle = currentProject?.title || '未命名视频项目';
   const projectStatus: VideoStatus = currentProject?.status || 'draft';
+
+  const handleMaterialDragStart = useCallback(
+    (e: React.DragEvent, material: Material) => {
+      e.dataTransfer.setData('materialId', material.id);
+      e.dataTransfer.effectAllowed = 'copy';
+    },
+    []
+  );
 
   const handleAddSticker = useCallback(
     (emoji: string) => {
@@ -150,6 +212,26 @@ export default function Editor() {
     alert('正在导出视频...');
   }, []);
 
+  const handleClipChange = useCallback(
+    (clip: TimelineClip) => {
+      updateClip(clip.id, {
+        startTime: clip.startTime,
+        endTime: clip.endTime,
+        track: clip.track,
+      });
+    },
+    [updateClip]
+  );
+
+  const handleDropMaterial = useCallback(
+    (materialId: string, startTime: number, track: number) => {
+      const material = materials.find((m) => m.id === materialId);
+      if (!material) return;
+      addClipFromMaterial(material, startTime, track);
+    },
+    [materials, addClipFromMaterial]
+  );
+
   const visibleStickers = stickers.filter(
     (s) => currentTime >= s.startTime && currentTime <= s.endTime
   );
@@ -217,6 +299,7 @@ export default function Editor() {
                       key={material.id}
                       className="group relative rounded-xl overflow-hidden border border-neutral-100 bg-white cursor-grab active:cursor-grabbing transition-all hover:shadow-card hover:-translate-y-0.5"
                       draggable
+                      onDragStart={(e) => handleMaterialDragStart(e, material)}
                     >
                       <div className="relative aspect-video bg-neutral-100">
                         {material.cover ? (
@@ -308,6 +391,10 @@ export default function Editor() {
                   <VideoPlayer
                     poster={videoMaterials[0]?.cover || DEFAULT_COVER}
                     duration={duration || 60}
+                    playing={playing}
+                    onTogglePlay={togglePlay}
+                    currentTime={currentTime}
+                    onSeek={setCurrentTime}
                   />
                   {visibleStickers.map((sticker) => (
                     <div
@@ -391,8 +478,12 @@ export default function Editor() {
             <Card className="shrink-0">
               <CardContent className="p-4">
                 <EditorTimeline
-                  totalDuration={duration || 60}
+                  clips={timelineClips}
+                  totalDuration={totalDuration}
                   currentTime={currentTime}
+                  onTimeChange={setCurrentTime}
+                  onClipChange={handleClipChange}
+                  onDropMaterial={handleDropMaterial}
                 />
               </CardContent>
             </Card>

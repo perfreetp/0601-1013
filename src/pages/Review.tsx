@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Check, X, Clock, ShieldAlert, Music, Image, Type, MessageSquare, User, ChevronRight } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -58,6 +58,23 @@ export default function Review() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [comment, setComment] = useState('');
+  const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+
+  const showToast = (message: string) => {
+    setToast({ show: true, message });
+    setTimeout(() => setToast({ show: false, message: '' }), 2000);
+  };
+
+  useEffect(() => {
+    if (selectedReviewId === null && reviews.length > 0) {
+      const firstPending = reviews.find((r) => r.status === 'pending');
+      if (firstPending) {
+        selectReview(firstPending.id);
+      } else {
+        selectReview(reviews[0].id);
+      }
+    }
+  }, [reviews, selectedReviewId, selectReview]);
 
   const filteredReviews = reviews.filter((r) => {
     const title = videoTitles[r.videoId] || '';
@@ -70,6 +87,8 @@ export default function Review() {
 
   const handleApprove = () => {
     if (!selectedReview) return;
+    if (selectedReview.status !== 'pending') return;
+    const title = videoTitles[selectedReview.videoId] || '未知视频';
     approveReview(selectedReview.id, {
       reviewerId: 'u001',
       reviewerName: '当前用户',
@@ -77,10 +96,13 @@ export default function Review() {
       timestamp: new Date().toISOString(),
     });
     setComment('');
+    showToast(`已通过「${title}」审核`);
   };
 
   const handleReject = () => {
     if (!selectedReview) return;
+    if (selectedReview.status !== 'pending') return;
+    const title = videoTitles[selectedReview.videoId] || '未知视频';
     rejectReview(selectedReview.id, {
       reviewerId: 'u001',
       reviewerName: '当前用户',
@@ -88,6 +110,7 @@ export default function Review() {
       timestamp: new Date().toISOString(),
     });
     setComment('');
+    showToast(`已驳回「${title}」`);
   };
 
   return (
@@ -270,6 +293,17 @@ export default function Review() {
                 />
               </>
             )}
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            'fixed bottom-8 left-1/2 -translate-x-1/2 z-50 transition-all duration-300',
+            toast.show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+          )}
+        >
+          <div className="bg-neutral-800 text-white px-6 py-3 rounded-xl shadow-lg text-sm">
+            {toast.message}
           </div>
         </div>
     </div>
@@ -474,7 +508,10 @@ function ReviewRecordsPanel({
             disabled={disabled}
             className="input min-h-[80px] resize-y disabled:opacity-50 disabled:cursor-not-allowed"
           />
-          <div className="flex gap-3 justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {disabled && (
+              <span className="text-xs text-neutral-500 mr-auto">该审核项已处理</span>
+            )}
             <Button
               variant="danger"
               icon={<X className="w-4 h-4" />}

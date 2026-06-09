@@ -3,7 +3,7 @@ import { ZoomIn, ZoomOut, Film, Music2, GripVertical } from 'lucide-react';
 import { cn, formatDuration } from '@/utils/format';
 import type { Clip } from '@/types';
 
-interface TimelineClip extends Clip {
+export interface TimelineClip extends Clip {
   color: string;
   name?: string;
 }
@@ -24,6 +24,7 @@ interface EditorTimelineProps {
   onTimeChange?: (time: number) => void;
   onClipChange?: (clip: TimelineClip) => void;
   onZoomChange?: (zoom: number) => void;
+  onDropMaterial?: (materialId: string, startTime: number, track: number) => void;
   className?: string;
 }
 
@@ -55,6 +56,7 @@ export default function EditorTimeline({
   onTimeChange,
   onClipChange,
   onZoomChange,
+  onDropMaterial,
   className,
 }: EditorTimelineProps) {
   const [internalTime, setInternalTime] = useState(0);
@@ -62,25 +64,15 @@ export default function EditorTimeline({
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const [draggingClip, setDraggingClip] = useState<string | null>(null);
   const [resizingClip, setResizingClip] = useState<{ id: string; edge: 'left' | 'right' } | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const dragStartRef = useRef<{ x: number; clipStartTime: number; clipEndTime: number; cursorTime: number } | null>(null);
+  const dragStartRef = useRef<{ x: number; clipStartTime: number; clipEndTime: number; cursorTime: number; clipTrack: number } | null>(null);
 
   const currentTime = externalTime ?? internalTime;
   const zoom = externalZoom ?? internalZoom;
   const pixelsPerSecond = PIXELS_PER_SECOND_BASE * zoom;
 
-  const [internalClips, setInternalClips] = useState<TimelineClip[]>(() => {
-    if (externalClips) return externalClips;
-    return [
-      { id: '1', materialId: 'v1', startTime: 0, endTime: 15, track: 0, color: CLIP_COLORS[0], name: '开场视频.mp4' },
-      { id: '2', materialId: 'v2', startTime: 15, endTime: 35, track: 0, color: CLIP_COLORS[1], name: '主视频.mp4' },
-      { id: '3', materialId: 'v3', startTime: 35, endTime: 60, track: 0, color: CLIP_COLORS[2], name: '产品展示.mp4' },
-      { id: '4', materialId: 'v4', startTime: 10, endTime: 25, track: 1, color: CLIP_COLORS[3], name: '覆盖层.mp4' },
-      { id: '5', materialId: 'a1', startTime: 0, endTime: 60, track: 2, color: CLIP_COLORS[4], name: '背景音乐.mp3' },
-    ];
-  });
-
-  const clips = externalClips ?? internalClips;
+  const clips = externalClips ?? [];
 
   const handleZoomIn = useCallback(() => {
     const newZoom = Math.min(zoom * 1.25, 5);
@@ -103,6 +95,17 @@ export default function EditorTimeline({
       return time;
     },
     [pixelsPerSecond, totalDuration]
+  );
+
+  const getTrackFromClientY = useCallback(
+    (clientY: number): number => {
+      if (!timelineRef.current) return 0;
+      const rect = timelineRef.current.getBoundingClientRect();
+      const y = clientY - rect.top - TIMELINE_HEIGHT;
+      const trackIndex = Math.floor(y / TRACK_HEIGHT);
+      return Math.max(0, Math.min(trackIndex, DEFAULT_TRACKS.length - 1));
+    },
+    []
   );
 
   const handleTimelineClick = useCallback(
@@ -131,6 +134,7 @@ export default function EditorTimeline({
         clipStartTime: clip.startTime,
         clipEndTime: clip.endTime,
         cursorTime,
+        clipTrack: clip.track,
       };
       setDraggingClip(clip.id);
     },
@@ -147,10 +151,37 @@ export default function EditorTimeline({
         clipStartTime: clip.startTime,
         clipEndTime: clip.endTime,
         cursorTime,
+        clipTrack: clip.track,
       };
       setResizingClip({ id: clip.id, edge });
     },
     [getTimeFromClientX]
+  );
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setIsDragOver(true);
+    },
+    []
+  );
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const materialId = e.dataTransfer.getData('materialId');
+      if (!materialId) return;
+      const startTime = getTimeFromClientX(e.clientX);
+      const track = getTrackFromClientY(e.clientY);
+      onDropMaterial?.(materialId, startTime, track);
+    },
+    [getTimeFromClientX, getTrackFromClientY, onDropMaterial]
   );
 
   useEffect(() => {
@@ -164,52 +195,47 @@ export default function EditorTimeline({
       if ((draggingClip || resizingClip) && dragStartRef.current) {
         const currentCursorTime = getTimeFromClientX(e.clientX);
         const deltaTime = currentCursorTime - dragStartRef.current.cursorTime;
+        const currentTrack = getTrackFromClientY(e.clientY);
 
         const targetId = draggingClip || resizingClip?.id;
         if (!targetId) return;
 
-        if (externalClips === undefined) {
-          setInternalClips((prev) =>
-            prev.map((c) => {
-              if (c.id !== targetId) return c;
+        const targetClip = clips.find((c) => c.id === targetId);
+        if (!targetClip) return;
 
-              if (draggingClip) {
-                const newStart = Math.max(0, dragStartRef.current!.clipStartTime + deltaTime);
-                const duration = dragStartRef.current!.clipEndTime - dragStartRef.current!.clipStartTime;
-                const newEnd = Math.min(newStart + duration, totalDuration);
-                const adjustedStart = newEnd - duration;
-                return { ...c, startTime: adjustedStart, endTime: newEnd };
-              }
+        let updatedClip: TimelineClip = { ...targetClip };
 
-              if (resizingClip?.edge === 'left') {
-                const newStart = Math.max(0, Math.min(dragStartRef.current!.clipStartTime + deltaTime, c.endTime - 0.5));
-                return { ...c, startTime: newStart };
-              }
-
-              if (resizingClip?.edge === 'right') {
-                const newEnd = Math.min(totalDuration, Math.max(dragStartRef.current!.clipEndTime + deltaTime, c.startTime + 0.5));
-                return { ...c, endTime: newEnd };
-              }
-
-              return c;
-            })
-          );
+        if (draggingClip) {
+          const newStart = Math.max(0, dragStartRef.current.clipStartTime + deltaTime);
+          const duration = dragStartRef.current.clipEndTime - dragStartRef.current.clipStartTime;
+          const newEnd = Math.min(newStart + duration, totalDuration);
+          const adjustedStart = newEnd - duration;
+          updatedClip = {
+            ...targetClip,
+            startTime: adjustedStart,
+            endTime: newEnd,
+            track: currentTrack,
+          };
         }
+
+        if (resizingClip?.edge === 'left') {
+          const newStart = Math.max(0, Math.min(dragStartRef.current.clipStartTime + deltaTime, targetClip.endTime - 0.5));
+          updatedClip = { ...targetClip, startTime: newStart };
+        }
+
+        if (resizingClip?.edge === 'right') {
+          const newEnd = Math.min(totalDuration, Math.max(dragStartRef.current.clipEndTime + deltaTime, targetClip.startTime + 0.5));
+          updatedClip = { ...targetClip, endTime: newEnd };
+        }
+
+        onClipChange?.(updatedClip);
       }
     };
 
     const handleMouseUp = () => {
       if (isDraggingPlayhead) setIsDraggingPlayhead(false);
-      if (draggingClip) {
-        setDraggingClip(null);
-        const updatedClip = clips.find((c) => c.id === draggingClip);
-        if (updatedClip) onClipChange?.(updatedClip);
-      }
-      if (resizingClip) {
-        const updatedClip = clips.find((c) => c.id === resizingClip.id);
-        setResizingClip(null);
-        if (updatedClip) onClipChange?.(updatedClip);
-      }
+      if (draggingClip) setDraggingClip(null);
+      if (resizingClip) setResizingClip(null);
       dragStartRef.current = null;
     };
 
@@ -221,7 +247,7 @@ export default function EditorTimeline({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDraggingPlayhead, draggingClip, resizingClip, getTimeFromClientX, externalTime, onTimeChange, externalClips, clips, onClipChange, totalDuration]);
+  }, [isDraggingPlayhead, draggingClip, resizingClip, getTimeFromClientX, getTrackFromClientY, externalTime, onTimeChange, clips, onClipChange, totalDuration]);
 
   const timeMarkers = [];
   const markerInterval = zoom > 2 ? 1 : zoom > 1 ? 5 : 10;
@@ -274,7 +300,17 @@ export default function EditorTimeline({
         </div>
       </div>
 
-      <div ref={timelineRef} className="relative overflow-x-auto overflow-y-hidden" onClick={handleTimelineClick}>
+      <div
+        ref={timelineRef}
+        className={cn(
+          'relative overflow-x-auto overflow-y-hidden',
+          isDragOver && 'ring-2 ring-inset ring-primary-500'
+        )}
+        onClick={handleTimelineClick}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div style={{ width: TRACK_HEADER_WIDTH + totalDuration * pixelsPerSecond, minWidth: '100%' }}>
           <div className="flex h-12 border-b border-neutral-700 sticky top-0 bg-neutral-800">
             <div className="w-[120px] shrink-0" />
@@ -282,8 +318,13 @@ export default function EditorTimeline({
               {timeMarkers.map((t) => (
                 <div
                   key={t}
-                  className="absolute top-0 h-full flex flex-col items-start"
+                  className="absolute top-0 h-full flex flex-col items-start cursor-pointer"
                   style={{ left: t * pixelsPerSecond }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (externalTime === undefined) setInternalTime(t);
+                    onTimeChange?.(t);
+                  }}
                 >
                   <div className="w-px h-2 bg-neutral-600 mt-3" />
                   <span className="text-[10px] text-neutral-500 font-mono mt-1">

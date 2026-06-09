@@ -41,6 +41,7 @@ export default function Materials() {
     materials,
     searchQuery,
     filterType,
+    addMaterial,
     setSearch,
     setFilter,
     deleteMaterial,
@@ -131,7 +132,7 @@ export default function Materials() {
 
         <Card className="animate-slide-up">
           <CardContent>
-            <MaterialUploader />
+            <MaterialUploader onMaterialCreated={(m) => addMaterial(m)} />
           </CardContent>
         </Card>
 

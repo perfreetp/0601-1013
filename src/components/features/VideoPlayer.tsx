@@ -7,9 +7,13 @@ interface VideoPlayerProps {
   poster?: string;
   duration?: number;
   autoPlay?: boolean;
+  playing?: boolean;
+  currentTime?: number;
   onPlay?: () => void;
   onPause?: () => void;
+  onTogglePlay?: () => void;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
+  onSeek?: (time: number) => void;
   onEnded?: () => void;
   className?: string;
 }
@@ -19,28 +23,60 @@ export default function VideoPlayer({
   poster,
   duration: externalDuration,
   autoPlay = false,
+  playing: externalPlaying,
+  currentTime: externalCurrentTime,
   onPlay,
   onPause,
+  onTogglePlay,
   onTimeUpdate,
+  onSeek,
   onEnded,
   className,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [internalPlaying, setInternalPlaying] = useState(false);
+  const [internalCurrentTime, setInternalCurrentTime] = useState(0);
   const [duration, setDuration] = useState(externalDuration || 0);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const hideControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSeekingRef = useRef(false);
+
+  const isPlaying = externalPlaying ?? internalPlaying;
+  const currentTime = externalCurrentTime ?? internalCurrentTime;
 
   const updateDuration = useCallback(() => {
     if (videoRef.current && !externalDuration) {
       setDuration(videoRef.current.duration || 0);
     }
   }, [externalDuration]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (externalPlaying !== undefined) {
+      if (externalPlaying && video.paused) {
+        video.play().catch(() => {});
+      } else if (!externalPlaying && !video.paused) {
+        video.pause();
+      }
+    }
+  }, [externalPlaying]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || externalCurrentTime === undefined) return;
+    if (isSeekingRef.current) return;
+
+    const diff = Math.abs(video.currentTime - externalCurrentTime);
+    if (diff > 0.2) {
+      video.currentTime = externalCurrentTime;
+    }
+  }, [externalCurrentTime]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -54,23 +90,23 @@ export default function VideoPlayer({
     const handleTimeUpdate = () => {
       if (videoRef.current) {
         const t = videoRef.current.currentTime;
-        setCurrentTime(t);
+        setInternalCurrentTime(t);
         onTimeUpdate?.(t, videoRef.current.duration || duration);
       }
     };
 
     const handlePlay = () => {
-      setIsPlaying(true);
+      setInternalPlaying(true);
       onPlay?.();
     };
 
     const handlePause = () => {
-      setIsPlaying(false);
+      setInternalPlaying(false);
       onPause?.();
     };
 
     const handleEnded = () => {
-      setIsPlaying(false);
+      setInternalPlaying(false);
       onEnded?.();
     };
 
@@ -102,7 +138,8 @@ export default function VideoPlayer({
     } else {
       video.pause();
     }
-  }, []);
+    onTogglePlay?.();
+  }, [onTogglePlay]);
 
   const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const video = videoRef.current;
@@ -111,9 +148,14 @@ export default function VideoPlayer({
     const rect = e.currentTarget.getBoundingClientRect();
     const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const newTime = percent * duration;
+    isSeekingRef.current = true;
     video.currentTime = newTime;
-    setCurrentTime(newTime);
-  }, [duration]);
+    setInternalCurrentTime(newTime);
+    onSeek?.(newTime);
+    setTimeout(() => {
+      isSeekingRef.current = false;
+    }, 100);
+  }, [duration, onSeek]);
 
   const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(e.target.value);
