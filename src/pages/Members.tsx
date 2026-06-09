@@ -56,6 +56,19 @@ export default function Members() {
     return Array.from(types);
   }, [logs]);
 
+  const targetMemberOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; removed: boolean }>();
+    members.forEach((m) => {
+      map.set(m.id, { id: m.id, name: m.name, removed: false });
+    });
+    logs.forEach((l) => {
+      if (l.targetMemberId && l.targetMemberSnapshot && !map.has(l.targetMemberId)) {
+        map.set(l.targetMemberId, { id: l.targetMemberId, name: l.targetMemberSnapshot.name, removed: true });
+      }
+    });
+    return Array.from(map.values());
+  }, [members, logs]);
+
   const filteredLogs = useMemo(() => {
     let result = [...logs];
     if (logFilterMember !== 'all') {
@@ -319,8 +332,8 @@ export default function Members() {
                   className="input py-2 text-xs !px-3 w-full bg-white"
                 >
                   <option value="all">被操作成员</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
+                  {targetMemberOptions.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}{m.removed ? '（已移除）' : ''}</option>
                   ))}
                 </select>
               </div>
@@ -402,20 +415,31 @@ export default function Members() {
               {selectedLog.targetMemberId && (
                 <div className="flex items-center gap-4">
                   {(() => {
-                    const targetMember = getMemberById(selectedLog.targetMemberId!);
+                    const snapshot = selectedLog.targetMemberSnapshot;
+                    const member = snapshot ? null : getMemberById(selectedLog.targetMemberId!);
+                    const name = snapshot?.name || member?.name || '未知成员';
+                    const email = snapshot?.email || member?.email;
+                    const avatar = snapshot?.avatar || getMemberAvatar(selectedLog.targetMemberId!);
+                    const role = snapshot?.role || member?.role;
                     return (
                       <>
                         <img
-                          src={getMemberAvatar(selectedLog.targetMemberId!)}
-                          alt={targetMember?.name || '未知成员'}
+                          src={avatar}
+                          alt={name}
                           className="w-12 h-12 rounded-full bg-neutral-100 ring-2 ring-white shadow-sm"
                         />
                         <div>
-                          <p className="text-sm font-medium text-neutral-800">
-                            {targetMember?.name || '未知成员'}
-                          </p>
-                          {targetMember?.email && (
-                            <p className="text-xs text-neutral-400 mt-0.5">{targetMember.email}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-neutral-800">{name}</p>
+                            {snapshot && !getMemberById(selectedLog.targetMemberId!) && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-500">已移除</span>
+                            )}
+                          </div>
+                          {email && (
+                            <p className="text-xs text-neutral-400 mt-0.5">{email}</p>
+                          )}
+                          {role && (
+                            <p className="text-xs text-neutral-500 mt-0.5">{ROLE_LABELS[role]}</p>
                           )}
                           <p className="text-xs text-neutral-500 mt-1">被操作成员</p>
                         </div>

@@ -140,6 +140,7 @@ export interface OperationLog {
   target: string;
   timestamp: string;
   targetMemberId?: string;
+  targetMemberSnapshot?: { name: string; email: string; role: MemberRole; avatar: string };
   oldValue?: string;
   newValue?: string;
   operatorId?: string;

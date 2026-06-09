@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Plus,
   Pin,
@@ -9,6 +9,7 @@ import {
   Archive,
   Calendar,
   Clock,
+  AlertCircle,
 } from 'lucide-react';
 import Tabs from '@/components/ui/Tabs';
 import { Card } from '@/components/ui/Card';
@@ -17,8 +18,18 @@ import Button from '@/components/ui/Button';
 import Switch from '@/components/ui/Switch';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
 import { useScheduleStore } from '@/store/useScheduleStore';
+import { useReviewStore } from '@/store/useReviewStore';
 import { cn, formatDate } from '@/utils/format';
 import type { Schedule, ScheduleStatus } from '@/types';
+
+const videoTitles: Record<string, string> = {
+  v001: '2024秋季招新宣传视频',
+  v002: '社团活动精彩回顾',
+  v003: '迎新晚会宣传视频',
+  v004: '部门招新介绍合集',
+  v005: '学长学姐经验分享',
+  v006: '校园生活vlog',
+};
 
 const statusTabs = [
   { value: 'pending', label: '待发布' },
@@ -69,6 +80,7 @@ const emptyFormData: FormData = {
 export default function Schedule() {
   const { schedules, addSchedule, updateSchedule, togglePin, updateStatus, deleteSchedule } =
     useScheduleStore();
+  const { reviews } = useReviewStore();
   const [activeStatus, setActiveStatus] = useState<ScheduleStatus>('pending');
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
   const [showModal, setShowModal] = useState(false);
@@ -80,6 +92,36 @@ export default function Schedule() {
   const showToast = (message: string) => {
     setToast({ show: true, message });
     setTimeout(() => setToast({ show: false, message: '' }), 2000);
+  };
+
+  useEffect(() => {
+    try {
+      const pending = localStorage.getItem('pending-schedule');
+      if (pending) {
+        const data = JSON.parse(pending);
+        if (data.videoId || data.title) {
+          setFormData({
+            ...emptyFormData,
+            videoId: data.videoId || '',
+            title: data.title || '',
+          });
+          setEditingSchedule(null);
+          setShowModal(true);
+        }
+        localStorage.removeItem('pending-schedule');
+      }
+    } catch (e) {
+      console.error('Failed to parse pending schedule', e);
+    }
+  }, []);
+
+  const approvedReviews = useMemo(() => {
+    return reviews.filter((r) => r.status === 'approved');
+  }, [reviews]);
+
+  const getReviewStatus = (videoId: string) => {
+    const review = reviews.find((r) => r.videoId === videoId);
+    return review?.status;
   };
 
   const filteredSchedules = useMemo(() => {
@@ -272,111 +314,123 @@ export default function Schedule() {
                 <p className="text-sm">暂无{statusConfig[activeStatus].label}的排期</p>
               </div>
             ) : (
-              filteredSchedules.map((schedule) => (
-                <Card
-                  key={schedule.id}
-                  hover
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, schedule.id)}
-                  className={cn(
-                    'p-4 transition-all duration-300 cursor-grab active:cursor-grabbing',
-                    schedule.isPinned && 'ring-2 ring-warning-200 bg-warning-50/30'
-                  )}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="relative w-32 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-neutral-100">
-                      <img
-                        src={`https://picsum.photos/seed/${schedule.videoId}/160/100`}
-                        alt={schedule.title}
-                        className="w-full h-full object-cover"
-                      />
-                      {schedule.isPinned && (
-                        <div className="absolute top-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-warning-500 text-white text-[10px] font-medium">
-                          <Pin className="w-3 h-3" />
-                          置顶
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-neutral-800 truncate">{schedule.title}</h3>
-                        <Badge variant={statusConfig[schedule.status].variant}>
-                          <span
-                            className={cn('w-1.5 h-1.5 rounded-full', statusConfig[schedule.status].dotColor)}
-                          />
-                          {statusConfig[schedule.status].label}
-                        </Badge>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5" />
-                          <span>发布时间: {formatDate(schedule.publishAt)}</span>
-                        </div>
-                        {schedule.offlineAt && (
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>下架时间: {formatDate(schedule.offlineAt)}</span>
+              filteredSchedules.map((schedule) => {
+                const reviewStatus = getReviewStatus(schedule.videoId);
+                const isReviewApproved = reviewStatus === 'approved';
+                return (
+                  <Card
+                    key={schedule.id}
+                    hover
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, schedule.id)}
+                    className={cn(
+                      'p-4 transition-all duration-300 cursor-grab active:cursor-grabbing',
+                      schedule.isPinned && 'ring-2 ring-warning-200 bg-warning-50/30'
+                    )}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="relative w-32 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-neutral-100">
+                        <img
+                          src={`https://picsum.photos/seed/${schedule.videoId}/160/100`}
+                          alt={schedule.title}
+                          className="w-full h-full object-cover"
+                        />
+                        {schedule.isPinned && (
+                          <div className="absolute top-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-warning-500 text-white text-[10px] font-medium">
+                            <Pin className="w-3 h-3" />
+                            置顶
                           </div>
                         )}
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={schedule.isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-                        className={cn(schedule.isPinned && 'text-warning-600 hover:text-warning-700')}
-                        onClick={() => handleTogglePin(schedule.id, schedule.title)}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<Edit3 className="w-4 h-4" />}
-                        onClick={() => handleOpenEdit(schedule)}
-                      />
-                      {schedule.status === 'pending' && (
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <h3 className="font-semibold text-neutral-800 truncate">{schedule.title}</h3>
+                          <Badge variant={statusConfig[schedule.status].variant}>
+                            <span
+                              className={cn('w-1.5 h-1.5 rounded-full', statusConfig[schedule.status].dotColor)}
+                            />
+                            {statusConfig[schedule.status].label}
+                          </Badge>
+                          {!isReviewApproved && (
+                            <Badge variant="danger">
+                              <AlertCircle className="w-3 h-3" />
+                              审核未通过
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>发布时间: {formatDate(schedule.publishAt)}</span>
+                          </div>
+                          {schedule.offlineAt && (
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>下架时间: {formatDate(schedule.offlineAt)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
                         <Button
-                          variant="primary"
+                          variant="ghost"
                           size="sm"
-                          icon={<UploadCloud className="w-4 h-4" />}
-                          onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'published')}
-                        >
-                          发布
-                        </Button>
-                      )}
-                      {schedule.status === 'published' && (
+                          icon={schedule.isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                          className={cn(schedule.isPinned && 'text-warning-600 hover:text-warning-700')}
+                          onClick={() => handleTogglePin(schedule.id, schedule.title)}
+                        />
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          icon={<Archive className="w-4 h-4" />}
-                          onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'offline')}
-                        >
-                          下架
-                        </Button>
-                      )}
-                      {schedule.status === 'offline' && (
+                          icon={<Edit3 className="w-4 h-4" />}
+                          onClick={() => handleOpenEdit(schedule)}
+                        />
+                        {schedule.status === 'pending' && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            icon={<UploadCloud className="w-4 h-4" />}
+                            onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'published')}
+                            disabled={!isReviewApproved}
+                            title={!isReviewApproved ? '该视频尚未通过审核' : ''}
+                          >
+                            发布
+                          </Button>
+                        )}
+                        {schedule.status === 'published' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<Archive className="w-4 h-4" />}
+                            onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'offline')}
+                          >
+                            下架
+                          </Button>
+                        )}
+                        {schedule.status === 'offline' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<UploadCloud className="w-4 h-4" />}
+                            onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'pending')}
+                          >
+                            重新排期
+                          </Button>
+                        )}
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          icon={<UploadCloud className="w-4 h-4" />}
-                          onClick={() => handleUpdateStatus(schedule.id, schedule.title, 'pending')}
-                        >
-                          重新排期
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<Trash2 className="w-4 h-4 text-danger-500" />}
-                        className="hover:bg-danger-50"
-                        onClick={() => handleDelete(schedule.id, schedule.title)}
-                      />
+                          icon={<Trash2 className="w-4 h-4 text-danger-500" />}
+                          className="hover:bg-danger-50"
+                          onClick={() => handleDelete(schedule.id, schedule.title)}
+                        />
+                      </div>
                     </div>
-                  </div>
-                </Card>
-              ))
+                  </Card>
+                );
+              })
             )}
           </div>
         </div>
@@ -503,15 +557,27 @@ export default function Schedule() {
 
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                视频 ID <span className="text-danger-500">*</span>
+                视频 <span className="text-danger-500">*</span>
               </label>
-              <input
-                type="text"
+              <select
                 value={formData.videoId}
-                onChange={(e) => setFormData({ ...formData, videoId: e.target.value })}
-                placeholder="请输入视频 ID，如 v001"
-                className="w-full px-3 py-2.5 rounded-lg border border-neutral-200 text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition-colors"
-              />
+                onChange={(e) => {
+                  const videoId = e.target.value;
+                  const title = videoTitles[videoId] || '';
+                  setFormData({ ...formData, videoId, title: formData.title || title });
+                }}
+                className="w-full px-3 py-2.5 rounded-lg border border-neutral-200 text-sm text-neutral-800 bg-white focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition-colors"
+              >
+                <option value="">请选择已审核通过的视频</option>
+                {approvedReviews.map((review) => (
+                  <option key={review.id} value={review.videoId}>
+                    {review.videoId} - {videoTitles[review.videoId] || '未知视频'}
+                  </option>
+                ))}
+              </select>
+              {approvedReviews.length === 0 && (
+                <p className="mt-1.5 text-xs text-warning-600">暂无可排期的视频，请先在审核页通过审核</p>
+              )}
             </div>
 
             <div>

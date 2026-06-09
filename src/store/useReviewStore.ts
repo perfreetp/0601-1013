@@ -4,6 +4,17 @@ import { reviews as initialReviews } from '@/mock/reviews';
 
 const STORAGE_KEY = 'club-video-reviews';
 
+const isTrulyPending = (review: Review): boolean => {
+  if (review.status === 'rejected') return false;
+  const hasReject = review.records.some((r) => r.action === 'reject');
+  if (hasReject) return false;
+  const approvedRoles = new Set(
+    review.records.filter((r) => r.action === 'approve' && r.role).map((r) => r.role)
+  );
+  const allApproved = review.requiredRoles.every((role) => approvedRoles.has(role));
+  return !allApproved;
+};
+
 const loadReviews = (): Review[] => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -49,21 +60,38 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       if (!review || review.status !== 'pending') {
         return state;
       }
+      const role = (record.role || 'reviewer') as MemberRole;
+      const hasReject = review.records.some((r) => r.action === 'reject');
+      if (hasReject) {
+        return state;
+      }
+      const alreadyApproved = review.records.some(
+        (r) => r.action === 'approve' && r.role === role
+      );
+      if (alreadyApproved) {
+        return state;
+      }
       const newRecord: ReviewRecord = {
         ...record,
-        role: record.role || 'reviewer',
+        role,
         action: 'approve',
       };
+      const newRecords = [...review.records, newRecord];
+      const approvedRoles = new Set(
+        newRecords.filter((r) => r.action === 'approve' && r.role).map((r) => r.role)
+      );
+      const allApproved = review.requiredRoles.every((r) => approvedRoles.has(r));
+      const newStatus = allApproved ? 'approved' as const : 'pending' as const;
       const newReviews = state.reviews.map((r) =>
         r.id === id
-          ? { ...r, status: 'approved' as const, records: [...r.records, newRecord] }
+          ? { ...r, status: newStatus, records: newRecords }
           : r
       );
       saveReviews(newReviews);
 
       let newSelectedReviewId = state.selectedReviewId;
-      if (state.filterStatus === 'pending') {
-        const remainingPending = newReviews.filter((r) => r.status === 'pending' && r.id !== id);
+      if (state.filterStatus === 'pending' && newStatus === 'approved') {
+        const remainingPending = newReviews.filter((r) => r.id !== id && isTrulyPending(r));
         newSelectedReviewId = remainingPending.length > 0 ? remainingPending[0].id : null;
       }
 
@@ -89,7 +117,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
 
       let newSelectedReviewId = state.selectedReviewId;
       if (state.filterStatus === 'pending') {
-        const remainingPending = newReviews.filter((r) => r.status === 'pending' && r.id !== id);
+        const remainingPending = newReviews.filter((r) => r.id !== id && isTrulyPending(r));
         newSelectedReviewId = remainingPending.length > 0 ? remainingPending[0].id : null;
       }
 

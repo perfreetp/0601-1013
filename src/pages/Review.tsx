@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Check, X, Clock, ShieldAlert, Music, Image, Type, MessageSquare, User, ChevronRight } from 'lucide-react';
+import { Search, Check, X, Clock, ShieldAlert, Music, Image, Type, MessageSquare, User, ChevronRight, Calendar } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
@@ -54,6 +54,8 @@ const videoCovers: Record<string, string> = {
 
 type FilterStatus = 'all' | ReviewStatus;
 
+const CURRENT_USER_ROLE: MemberRole = 'reviewer';
+
 export default function Review() {
   const { reviews, selectedReviewId, selectReview, approveReview, rejectReview, filterStatus, setFilterStatus } = useReviewStore();
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -92,6 +94,7 @@ export default function Review() {
     approveReview(selectedReview.id, {
       reviewerId: 'u001',
       reviewerName: '当前用户',
+      role: CURRENT_USER_ROLE,
       comment: comment || '内容合规，审核通过',
       timestamp: new Date().toISOString(),
     });
@@ -106,11 +109,22 @@ export default function Review() {
     rejectReview(selectedReview.id, {
       reviewerId: 'u001',
       reviewerName: '当前用户',
+      role: CURRENT_USER_ROLE,
       comment: comment || '请修改后重新提交',
       timestamp: new Date().toISOString(),
     });
     setComment('');
     showToast(`已驳回「${title}」`);
+  };
+
+  const handleEnterSchedule = () => {
+    if (!selectedReview) return;
+    const title = videoTitles[selectedReview.videoId] || '未知视频';
+    localStorage.setItem('pending-schedule', JSON.stringify({
+      videoId: selectedReview.videoId,
+      title,
+    }));
+    window.location.hash = '#/schedule';
   };
 
   return (
@@ -274,6 +288,17 @@ export default function Review() {
                             {formatDate(videoSubmitters[selectedReview.videoId]?.time || '')}
                           </div>
                         </div>
+                        {selectedReview.status === 'approved' && (
+                          <div className="flex justify-end mt-4">
+                            <Button
+                              variant="primary"
+                              icon={<Calendar className="w-4 h-4" />}
+                              onClick={handleEnterSchedule}
+                            >
+                              进入排期
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -291,6 +316,7 @@ export default function Review() {
                   onApprove={handleApprove}
                   onReject={handleReject}
                   disabled={selectedReview.status !== 'pending'}
+                  currentUserRole={CURRENT_USER_ROLE}
                 />
               </>
             )}
@@ -518,6 +544,7 @@ function ReviewRecordsPanel({
   onApprove,
   onReject,
   disabled,
+  currentUserRole,
 }: {
   review: Review;
   records: ReviewRecord[];
@@ -526,7 +553,24 @@ function ReviewRecordsPanel({
   onApprove: () => void;
   onReject: () => void;
   disabled: boolean;
+  currentUserRole: MemberRole;
 }) {
+  const isRoleInRequired = review.requiredRoles.includes(currentUserRole);
+  const hasRoleApproved = records.some(
+    (r) => r.action === 'approve' && r.role === currentUserRole
+  );
+  const approveDisabled = disabled || !isRoleInRequired || hasRoleApproved;
+  const rejectDisabled = disabled || !isRoleInRequired;
+
+  let tipText = '';
+  if (disabled) {
+    tipText = '该审核项已处理';
+  } else if (!isRoleInRequired) {
+    tipText = `当前角色（${ROLE_LABELS[currentUserRole]}）不在会签角色中`;
+  } else if (hasRoleApproved) {
+    tipText = '该角色已确认';
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -570,21 +614,21 @@ function ReviewRecordsPanel({
 
         <div className="space-y-3">
           <textarea
-            placeholder={disabled ? '该审核项已处理，无法添加意见' : '请输入审核意见...'}
+            placeholder={approveDisabled && rejectDisabled ? '该审核项已处理，无法添加意见' : '请输入审核意见...'}
             value={comment}
             onChange={(e) => onCommentChange(e.target.value)}
-            disabled={disabled}
+            disabled={approveDisabled && rejectDisabled}
             className="input min-h-[80px] resize-y disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <div className="flex items-center justify-end gap-3">
-            {disabled && (
-              <span className="text-xs text-neutral-500 mr-auto">该审核项已处理</span>
+            {tipText && (
+              <span className="text-xs text-neutral-500 mr-auto">{tipText}</span>
             )}
             <Button
               variant="danger"
               icon={<X className="w-4 h-4" />}
               onClick={onReject}
-              disabled={disabled}
+              disabled={rejectDisabled}
             >
               驳回
             </Button>
@@ -592,9 +636,9 @@ function ReviewRecordsPanel({
               variant="primary"
               icon={<Check className="w-4 h-4" />}
               onClick={onApprove}
-              disabled={disabled}
+              disabled={approveDisabled}
             >
-              审核通过
+              {hasRoleApproved && isRoleInRequired ? '该角色已确认' : '审核通过'}
             </Button>
           </div>
         </div>
