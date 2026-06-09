@@ -95,10 +95,12 @@ export default function Schedule() {
   };
 
   useEffect(() => {
-    try {
-      const pending = localStorage.getItem('pending-schedule');
-      if (pending) {
+    const pending = localStorage.getItem('pending-schedule');
+    localStorage.removeItem('pending-schedule');
+    if (pending) {
+      try {
         const data = JSON.parse(pending);
+        if (data.ts && Date.now() - data.ts > 30000) return;
         if (data.videoId || data.title) {
           setFormData({
             ...emptyFormData,
@@ -108,10 +110,9 @@ export default function Schedule() {
           setEditingSchedule(null);
           setShowModal(true);
         }
-        localStorage.removeItem('pending-schedule');
+      } catch (e) {
+        console.error('Failed to parse pending schedule', e);
       }
-    } catch (e) {
-      console.error('Failed to parse pending schedule', e);
     }
   }, []);
 
@@ -235,6 +236,10 @@ export default function Schedule() {
     }
     if (formData.offlineAt && new Date(formData.offlineAt) < new Date(formData.publishAt)) {
       showToast('下架时间不能早于发布时间');
+      return;
+    }
+    if (formData.status === 'published' && getReviewStatus(formData.videoId) !== 'approved') {
+      showToast('该视频尚未通过审核，无法发布');
       return;
     }
 
@@ -568,15 +573,16 @@ export default function Schedule() {
                 }}
                 className="w-full px-3 py-2.5 rounded-lg border border-neutral-200 text-sm text-neutral-800 bg-white focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition-colors"
               >
-                <option value="">请选择已审核通过的视频</option>
-                {approvedReviews.map((review) => (
+                <option value="">请选择视频</option>
+                {reviews.map((review) => (
                   <option key={review.id} value={review.videoId}>
                     {review.videoId} - {videoTitles[review.videoId] || '未知视频'}
+                    {review.status !== 'approved' && ' (未审核通过)'}
                   </option>
                 ))}
               </select>
-              {approvedReviews.length === 0 && (
-                <p className="mt-1.5 text-xs text-warning-600">暂无可排期的视频，请先在审核页通过审核</p>
+              {reviews.length === 0 && (
+                <p className="mt-1.5 text-xs text-warning-600">暂无可选择的视频，请先在审核页提交审核</p>
               )}
             </div>
 
@@ -613,6 +619,9 @@ export default function Schedule() {
                 <option value="published">已发布</option>
                 <option value="offline">已下架</option>
               </select>
+              {formData.videoId && getReviewStatus(formData.videoId) !== 'approved' && (
+                <p className="mt-1.5 text-xs text-danger-500">该视频暂未通过审核</p>
+              )}
             </div>
 
             <div className="pt-1">

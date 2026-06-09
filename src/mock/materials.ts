@@ -11,6 +11,7 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m001/400/225',
     tags: ['招新', '宣传', '主视频'],
     createdAt: '2024-08-15 10:30:00',
+    videoId: 'v001',
   },
   {
     id: 'm002',
@@ -22,6 +23,7 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m002/400/225',
     tags: ['活动', '集锦', '回顾'],
     createdAt: '2024-08-14 14:20:00',
+    videoId: 'v001',
   },
   {
     id: 'm003',
@@ -33,6 +35,7 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m003/400/225',
     tags: ['往年', '回顾', '招新'],
     createdAt: '2024-08-10 09:15:00',
+    videoId: 'v001',
   },
   {
     id: 'm004',
@@ -44,6 +47,7 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m004/400/225',
     tags: ['晚会', '迎新', '精彩'],
     createdAt: '2024-08-12 16:45:00',
+    videoId: 'v001',
   },
   {
     id: 'm005',
@@ -55,6 +59,7 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m005/400/225',
     tags: ['采访', '成员', '介绍'],
     createdAt: '2024-08-08 11:30:00',
+    videoId: 'v002',
   },
   {
     id: 'm006',
@@ -65,6 +70,7 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m006/400/300',
     tags: ['合影', '全体', '纪念'],
     createdAt: '2024-07-20 15:00:00',
+    videoId: 'v002',
   },
   {
     id: 'm007',
@@ -75,6 +81,7 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m007/400/300',
     tags: ['开放日', '活动', '现场'],
     createdAt: '2024-07-15 13:20:00',
+    videoId: 'v002',
   },
   {
     id: 'm008',
@@ -85,6 +92,7 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m008/400/560',
     tags: ['海报', '招新', '设计'],
     createdAt: '2024-08-01 10:00:00',
+    videoId: 'v003',
   },
   {
     id: 'm009',
@@ -95,6 +103,7 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m009/400/300',
     tags: ['办公室', '环境', '展示'],
     createdAt: '2024-07-25 09:45:00',
+    videoId: 'v003',
   },
   {
     id: 'm010',
@@ -104,6 +113,7 @@ export const materials: Material[] = [
     size: 15 * 1024,
     tags: ['字幕', '招新', '文案'],
     createdAt: '2024-08-16 14:30:00',
+    videoId: 'v003',
   },
   {
     id: 'm011',
@@ -113,6 +123,7 @@ export const materials: Material[] = [
     size: 8 * 1024,
     tags: ['介绍', '社团', '文字'],
     createdAt: '2024-08-05 11:20:00',
+    videoId: 'v004',
   },
   {
     id: 'm012',
@@ -122,6 +133,7 @@ export const materials: Material[] = [
     size: 22 * 1024,
     tags: ['字幕', '旁白', '活动'],
     createdAt: '2024-08-11 16:00:00',
+    videoId: 'v004',
   },
   {
     id: 'm013',
@@ -132,6 +144,7 @@ export const materials: Material[] = [
     duration: 210,
     tags: ['BGM', '青春', '活力'],
     createdAt: '2024-08-03 08:30:00',
+    videoId: 'v004',
   },
   {
     id: 'm014',
@@ -142,6 +155,7 @@ export const materials: Material[] = [
     duration: 45,
     tags: ['开场', '大气', 'BGM'],
     createdAt: '2024-08-04 09:15:00',
+    videoId: 'v005',
   },
   {
     id: 'm015',
@@ -152,6 +166,7 @@ export const materials: Material[] = [
     duration: 180,
     tags: ['温情', '回忆', 'BGM'],
     createdAt: '2024-08-06 10:45:00',
+    videoId: 'v005',
   },
   {
     id: 'm016',
@@ -163,6 +178,7 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m016/400/225',
     tags: ['部门', '风采', '展示'],
     createdAt: '2024-08-13 15:30:00',
+    videoId: 'v006',
   },
   {
     id: 'm017',
@@ -173,5 +189,6 @@ export const materials: Material[] = [
     cover: 'https://picsum.photos/seed/m017/400/300',
     tags: ['拓展', '户外', '团建'],
     createdAt: '2024-07-28 17:00:00',
+    videoId: 'v006',
   },
 ];

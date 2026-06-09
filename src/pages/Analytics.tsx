@@ -488,7 +488,7 @@ function ReviewModal({
   if (!video) return null;
 
   const videoCover = VIDEO_COVERS[video.videoId] || 'https://picsum.photos/seed/' + video.videoId + '/400/225';
-  const relatedMaterials = materials.slice(0, 3);
+  const relatedMaterials = materials.filter((m) => m.videoId === video.videoId);
   const review = reviews.find((r) => r.videoId === video.videoId);
   const schedule = schedules.find((s) => s.videoId === video.videoId);
 

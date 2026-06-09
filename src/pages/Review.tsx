@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Search, Check, X, Clock, ShieldAlert, Music, Image, Type, MessageSquare, User, ChevronRight, Calendar } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Check, X, Clock, ShieldAlert, Music, Image, Type, MessageSquare, User, ChevronRight, Calendar, ChevronDown } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
@@ -54,18 +54,31 @@ const videoCovers: Record<string, string> = {
 
 type FilterStatus = 'all' | ReviewStatus;
 
-const CURRENT_USER_ROLE: MemberRole = 'reviewer';
+const SWITCHABLE_ROLES: MemberRole[] = ['reviewer', 'publisher', 'editor'];
 
 export default function Review() {
   const { reviews, selectedReviewId, selectReview, approveReview, rejectReview, filterStatus, setFilterStatus } = useReviewStore();
   const [searchKeyword, setSearchKeyword] = useState('');
   const [comment, setComment] = useState('');
   const [toast, setToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+  const [currentRole, setCurrentRole] = useState<MemberRole>('reviewer');
+  const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+  const roleDropdownRef = useRef<HTMLDivElement>(null);
 
   const showToast = (message: string) => {
     setToast({ show: true, message });
     setTimeout(() => setToast({ show: false, message: '' }), 2000);
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (roleDropdownRef.current && !roleDropdownRef.current.contains(event.target as Node)) {
+        setRoleDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (selectedReviewId === null && reviews.length > 0) {
@@ -94,7 +107,7 @@ export default function Review() {
     approveReview(selectedReview.id, {
       reviewerId: 'u001',
       reviewerName: '当前用户',
-      role: CURRENT_USER_ROLE,
+      role: currentRole,
       comment: comment || '内容合规，审核通过',
       timestamp: new Date().toISOString(),
     });
@@ -109,7 +122,7 @@ export default function Review() {
     rejectReview(selectedReview.id, {
       reviewerId: 'u001',
       reviewerName: '当前用户',
-      role: CURRENT_USER_ROLE,
+      role: currentRole,
       comment: comment || '请修改后重新提交',
       timestamp: new Date().toISOString(),
     });
@@ -123,15 +136,52 @@ export default function Review() {
     localStorage.setItem('pending-schedule', JSON.stringify({
       videoId: selectedReview.videoId,
       title,
+      ts: Date.now(),
     }));
     window.location.hash = '#/schedule';
   };
 
   return (
     <div className="h-full flex flex-col gap-6 animate-fade-in">
-        <div>
-          <h1 className="section-title">内容审核</h1>
-          <p className="section-subtitle">敏感词检测、版权校验与多人会签流程</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="section-title">内容审核</h1>
+            <p className="section-subtitle">敏感词检测、版权校验与多人会签流程</p>
+          </div>
+          <div className="relative" ref={roleDropdownRef}>
+            <button
+              onClick={() => setRoleDropdownOpen(!roleDropdownOpen)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 transition-colors shadow-sm"
+            >
+              <span className="text-xs text-neutral-500">当前身份：</span>
+              <Badge variant="default" className={cn('text-xs', ROLE_COLORS[currentRole])}>
+                {ROLE_LABELS[currentRole]}
+              </Badge>
+              <ChevronDown className={cn('w-4 h-4 text-neutral-400 transition-transform', roleDropdownOpen && 'rotate-180')} />
+            </button>
+            {roleDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-44 bg-white border border-neutral-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                {SWITCHABLE_ROLES.map((role) => (
+                  <button
+                    key={role}
+                    onClick={() => {
+                      setCurrentRole(role);
+                      setRoleDropdownOpen(false);
+                    }}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors',
+                      currentRole === role ? 'bg-primary-50 text-primary-700' : 'text-neutral-700 hover:bg-neutral-50'
+                    )}
+                  >
+                    <Badge variant="default" className={cn('text-xs', ROLE_COLORS[role])}>
+                      {ROLE_LABELS[role]}
+                    </Badge>
+                    {currentRole === role && <Check className="w-4 h-4 ml-auto text-primary-500" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 flex gap-6 min-h-0">
@@ -186,6 +236,12 @@ export default function Review() {
                       const StatusIcon = statusCfg.icon;
                       const isSelected = selectedReviewId === review.id;
 
+                      const approvedRoles = new Set(
+                        review.records.filter((r) => r.action === 'approve' && r.role).map((r) => r.role)
+                      );
+                      const pendingRoles = review.requiredRoles.filter((role) => !approvedRoles.has(role));
+                      const isAllSigned = pendingRoles.length === 0;
+
                       return (
                         <div
                           key={review.id}
@@ -228,6 +284,28 @@ export default function Review() {
                                   <span className="text-xs text-warning-600">
                                     {review.sensitiveWords.length} 处敏感词
                                   </span>
+                                </div>
+                              )}
+                              {review.status === 'pending' && (
+                                <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                                  {isAllSigned ? (
+                                    <span className="text-xs text-success-600 font-medium">会签完成</span>
+                                  ) : (
+                                    <>
+                                      <span className="text-xs text-neutral-500">待确认：</span>
+                                      {pendingRoles.map((role) => (
+                                        <span
+                                          key={role}
+                                          className={cn(
+                                            'text-xs font-medium px-1.5 py-0.5 rounded',
+                                            ROLE_COLORS[role]
+                                          )}
+                                        >
+                                          {ROLE_LABELS[role]}
+                                        </span>
+                                      ))}
+                                    </>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -316,7 +394,7 @@ export default function Review() {
                   onApprove={handleApprove}
                   onReject={handleReject}
                   disabled={selectedReview.status !== 'pending'}
-                  currentUserRole={CURRENT_USER_ROLE}
+                  currentUserRole={currentRole}
                 />
               </>
             )}

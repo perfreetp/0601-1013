@@ -15,6 +15,7 @@ export interface Material {
   cover?: string;
   tags: string[];
   createdAt: string;
+  videoId?: string;
 }
 
 export interface Clip {
